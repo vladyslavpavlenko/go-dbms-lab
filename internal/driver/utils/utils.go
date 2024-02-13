@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 )
 
 // AddMasterIndex adds an index and a corresponding address of the new entry to Master.
@@ -58,4 +59,24 @@ func SortIndices(indices []driver.IndexTable) []driver.IndexTable {
 	log.Println(indices)
 
 	return indices
+}
+
+// NumberOfRecords return the number of records in a table using index table.
+func NumberOfRecords(indices []driver.IndexTable) int {
+	return len(indices)
+}
+
+// NumberOfSubrecords TODO
+func NumberOfSubrecords(indices []driver.IndexTable, id uint32) int {
+	return 0
+}
+
+// PrintDecodedModel decodes a model from binary and prints it to the console.
+func PrintDecodedModel(model any) {
+
+}
+
+// ByteArrayToString converts a byte array to a string.
+func ByteArrayToString(bytes []byte) string {
+	return strings.TrimRight(string(bytes), "\x00")
 }

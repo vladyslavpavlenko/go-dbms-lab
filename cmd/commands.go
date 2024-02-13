@@ -20,8 +20,22 @@ func commands(app *config.AppConfig) *cobra.Command {
 
 	var cmdCalcM = &cobra.Command{
 		Use:   "calc-m [id]",
-		Short: "Prints the number of entries.",
+		Short: "Prints the number of entries in a master table.",
 		Run:   handlers.Repo.CalcMaster,
+	}
+
+	var cmdCalcS = &cobra.Command{
+		Use:   "calc-s",
+		Short: "Prints the number of entries in a slave table.",
+		Args:  cobra.ExactArgs(0),
+		Run:   handlers.Repo.CalcMaster,
+	}
+
+	var cmdUtM = &cobra.Command{
+		Use:   "ut-m",
+		Short: "Prints all the entries of the master table.",
+		Args:  cobra.ExactArgs(0),
+		Run:   handlers.Repo.UtMaster,
 	}
 
 	//var cmdInsertS = &cobra.Command{
@@ -32,6 +46,9 @@ func commands(app *config.AppConfig) *cobra.Command {
 	//}
 
 	rootCmd.AddCommand(cmdInsertM)
+	rootCmd.AddCommand(cmdCalcM)
+	rootCmd.AddCommand(cmdUtM)
+	rootCmd.AddCommand(cmdCalcS)
 
 	return rootCmd
 }

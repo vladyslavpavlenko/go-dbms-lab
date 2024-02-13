@@ -20,20 +20,21 @@ type Table struct {
 	FL      *os.File
 	IND     *os.File
 	Indices []IndexTable
-	Offset  uint32
+	Size    int
 }
 
 // NewTable creates a new Table.
-func NewTable(fl *os.File, ind *os.File, indices []IndexTable) *Table {
+func NewTable(fl *os.File, ind *os.File, indices []IndexTable, model any) *Table {
 	return &Table{
 		FL:      fl,
 		IND:     ind,
 		Indices: indices,
+		Size:    binary.Size(model),
 	}
 }
 
 // CreateTable creates both .fl and .ind files to represent a table and returns a Table.
-func CreateTable(name string) (*Table, error) {
+func CreateTable(name string, model any) (*Table, error) {
 	flName := fmt.Sprintf("%s.fl", name)
 	flFile, err := os.OpenFile(flName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
@@ -46,16 +47,20 @@ func CreateTable(name string) (*Table, error) {
 		return nil, errors.New(fmt.Sprintf("error creating .ind file: %s", err))
 	}
 
-	conn := NewTable(flFile, indFile, []IndexTable{})
+	conn := NewTable(flFile, indFile, []IndexTable{}, model)
 
 	return conn, err
 }
 
 // ReadModel reads data from a file to a model.
-func ReadModel(file *os.File, model any) error {
+func ReadModel(file *os.File, model any, offset int64, whence int) error {
+	if _, err := file.Seek(offset, whence); err != nil {
+		return err
+	}
+
 	err := binary.Read(file, binary.BigEndian, model)
 	if err != nil {
-		return errors.New(fmt.Sprintf("file reading failed: %s", err))
+		return err
 	}
 
 	return nil
