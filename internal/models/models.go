@@ -1,13 +1,21 @@
 package models
 
+type Master struct {
+	FirstSlaveID int64
+	Presence     bool
+}
+
+type Slave struct {
+	Next int64
+}
+
 // Course is the course model.
 type Course struct {
-	ID                 uint32
-	Title              [50]byte
-	Category           [15]byte
-	Instructor         [30]byte
-	FirstCertificateID uint32
-	Presence           bool
+	ID         uint32
+	Title      [50]byte
+	Category   [15]byte
+	Instructor [30]byte
+	Master
 }
 
 // Certificate is the certificate model.
@@ -15,6 +23,5 @@ type Certificate struct {
 	ID       uint32
 	CourseID uint32
 	IssuedTo [30]byte
-	Presence bool
-	Next     int64
+	Slave
 }
