@@ -83,10 +83,24 @@ func (r *Repository) InsertMaster(cmd *cobra.Command, args []string) {
 
 // UtMaster handles the "ut-m" command for printing entries in the master table.
 func (r *Repository) UtMaster(cmd *cobra.Command, args []string) {
+	r.printMasterTable(true)
+}
+
+// GetMasterAll handles the "get-m -all" command for printing all entries in the master table.
+func (r *Repository) GetMasterAll(cmd *cobra.Command, args []string) {
+	r.printMasterTable(false)
+}
+
+// InsertSlave handles insert-s command for adding entries to the slave table.
+func InsertSlave() {
+
+}
+
+func (r *Repository) printMasterTable(includeDetails bool) {
 	flFile := r.App.Master.FL
 
 	if _, err := flFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Fprintf(os.Stderr, fmt.Sprintf("error reading data: %s", err))
+		fmt.Fprintf(os.Stderr, "error seeking file: %s\n", err)
 		return
 	}
 
@@ -98,7 +112,7 @@ func (r *Repository) UtMaster(cmd *cobra.Command, args []string) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Fprintf(os.Stderr, fmt.Sprintf("error reading data: %s", err))
+			fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
 			return
 		}
 
@@ -107,24 +121,30 @@ func (r *Repository) UtMaster(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	for _, d := range data {
-		fmt.Println(d)
+	headers := []string{"[ID]", "[TITLE]", "[CATEGORY]", "[INSTRUCTOR]"}
+	if includeDetails {
+		headers = append(headers, "[FC_ID]", "[PRESENCE]")
 	}
 
-	tbl := table.New("ID", "Title", "Category", "Instructor").WithWriter(os.Stdout)
+	headersInterface := make([]interface{}, len(headers))
+	for i, v := range headers {
+		headersInterface[i] = v
+	}
+
+	tbl := table.New(headersInterface...).WithWriter(os.Stdout).WithPadding(4)
 
 	for _, entry := range data {
 		stringTitle := utils.ByteArrayToString(entry.Title[:])
 		stringCategory := utils.ByteArrayToString(entry.Category[:])
 		stringInstructor := utils.ByteArrayToString(entry.Instructor[:])
 
-		tbl.AddRow(entry.ID, stringTitle, stringCategory, stringInstructor)
+		row := []interface{}{entry.ID, stringTitle, stringCategory, stringInstructor}
+		if includeDetails {
+			row = append(row, entry.FirstSlaveID, entry.Presence)
+		}
+
+		tbl.AddRow(row...)
 	}
 
 	tbl.Print()
-}
-
-// InsertSlave handles insert-s command for adding entries to the slave table.
-func InsertSlave() {
-
 }

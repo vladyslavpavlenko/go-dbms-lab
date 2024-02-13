@@ -20,23 +20,37 @@ func commands(app *config.AppConfig) *cobra.Command {
 
 	var cmdCalcM = &cobra.Command{
 		Use:   "calc-m [id]",
-		Short: "Prints the number of entries in a master table.",
+		Short: "Prints the number of entries in a master table",
+		Args:  cobra.MaximumNArgs(1),
 		Run:   handlers.Repo.CalcMaster,
 	}
 
 	var cmdCalcS = &cobra.Command{
 		Use:   "calc-s",
-		Short: "Prints the number of entries in a slave table.",
+		Short: "Prints the number of entries in a slave table",
 		Args:  cobra.ExactArgs(0),
 		Run:   handlers.Repo.CalcMaster,
 	}
 
 	var cmdUtM = &cobra.Command{
 		Use:   "ut-m",
-		Short: "Prints all the entries of the master table.",
+		Short: "Prints all the entries of the master table",
 		Args:  cobra.ExactArgs(0),
 		Run:   handlers.Repo.UtMaster,
 	}
+
+	var cmdGetM = &cobra.Command{
+		Use:   "get-m",
+		Short: "Prints all the entries of the master table",
+		Run:   handlers.Repo.GetMasterAll,
+	}
+
+	//var cmdGetM = &cobra.Command{
+	//	Use:   "get-m <id> [field_name]",
+	//	Short: "Prints all the entries of the master table.",
+	//	Args:  cobra.MinimumNArgs(1),
+	//	Run:   handlers.Repo.GetMaster,
+	//}
 
 	//var cmdInsertS = &cobra.Command{
 	//	Use:   "insert-s <id> <master_id> <issued_to>",
@@ -49,6 +63,9 @@ func commands(app *config.AppConfig) *cobra.Command {
 	rootCmd.AddCommand(cmdCalcM)
 	rootCmd.AddCommand(cmdUtM)
 	rootCmd.AddCommand(cmdCalcS)
+
+	rootCmd.AddCommand(cmdGetM)
+	cmdGetM.Flags().Bool("all", false, "If set, prints all entries of the master table")
 
 	return rootCmd
 }

@@ -27,8 +27,6 @@ func AddMasterIndex(indices []driver.IndexTable, id uint32, address uint32) []dr
 func WriteMasterIndices(indFile *os.File, indices []driver.IndexTable) {
 	sorted := SortIndices(indices)
 
-	fmt.Printf("Sorted: %v\n", sorted)
-
 	err := driver.WriteModel(indFile, sorted, 0, io.SeekStart)
 	if err != nil {
 		log.Println(err)
@@ -69,11 +67,6 @@ func NumberOfRecords(indices []driver.IndexTable) int {
 // NumberOfSubrecords TODO
 func NumberOfSubrecords(indices []driver.IndexTable, id uint32) int {
 	return 0
-}
-
-// PrintDecodedModel decodes a model from binary and prints it to the console.
-func PrintDecodedModel(model any) {
-
 }
 
 // ByteArrayToString converts a byte array to a string.

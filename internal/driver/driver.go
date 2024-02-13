@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 )
@@ -25,6 +26,8 @@ type Table struct {
 
 // NewTable creates a new Table.
 func NewTable(fl *os.File, ind *os.File, indices []IndexTable, model any) *Table {
+	indices, _ = LoadIndices(ind)
+
 	return &Table{
 		FL:      fl,
 		IND:     ind,
@@ -84,4 +87,33 @@ func WriteModel(file *os.File, model any, offset int64, whence int) error {
 	}
 
 	return nil
+}
+
+// LoadIndices loads an existing IndexTable from an .ind file  when the application starts.
+func LoadIndices(indFile *os.File) ([]IndexTable, error) {
+	if _, err := indFile.Seek(0, io.SeekStart); err != nil {
+		fmt.Fprintf(os.Stderr, fmt.Sprintf("error reading data: %s", err))
+		return nil, err
+	}
+
+	var indices []IndexTable
+	var model IndexTable
+
+	for {
+		err := ReadModel(indFile, &model, 0, io.SeekCurrent)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Fprintf(os.Stderr, fmt.Sprintf("error reading data: %s", err))
+			return nil, err
+		}
+
+		indices = append(indices, model)
+	}
+
+	for _, d := range indices {
+		fmt.Println(d)
+	}
+
+	return indices, nil
 }
