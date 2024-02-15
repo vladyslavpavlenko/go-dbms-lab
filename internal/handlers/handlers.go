@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
@@ -11,36 +10,30 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
-// CalcMaster handles the "calc-m [id]" command for printing the number of entries in the master table.
+// CalcMaster calculates and prints the number of entries in the master table, optionally calculating the number
+// of entries in the slave table by Master entry's ID.
 func (r *Repository) CalcMaster(cmd *cobra.Command, args []string) {
-	var id int
-	var err error
-
-	indices := r.App.Master.Indices
-
 	if len(args) >= 1 {
-		id, err = strconv.Atoi(args[0])
+		id, err := strconv.Atoi(args[0])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error parsing ID: %v\n", err)
 			return
 		}
 		fmt.Printf("ID is %d\n", id)
 	} else {
-		fmt.Println(utils.NumberOfRecords(indices))
+		fmt.Println(utils.NumberOfRecords(r.App.Master.Indices))
 	}
 }
 
-// CalcSlave handles the "calc-s" command for printing the number of entries in the slave table.
+// CalcSlave calculates and prints the number of entries in the slave table.
 func (r *Repository) CalcSlave(cmd *cobra.Command, args []string) {
-	indices := r.App.Slave.Indices
-
-	fmt.Println(utils.NumberOfRecords(indices))
+	fmt.Println(utils.NumberOfRecords(r.App.Slave.Indices))
 }
 
-// InsertMaster handles the "insert-m <id> <title> <category> <instructor>" command for adding
-// entries to the master table.
+// InsertMaster handles adding entries to the master table.
 func (r *Repository) InsertMaster(cmd *cobra.Command, args []string) {
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
@@ -67,84 +60,60 @@ func (r *Repository) InsertMaster(cmd *cobra.Command, args []string) {
 	course.FirstSlaveID = -1
 	course.Presence = true
 
-	offset := utils.NumberOfRecords(indices) * r.App.Master.Size // 108
+	offset := utils.NumberOfRecords(r.App.Master.Indices) * r.App.Master.Size
 
-	err = driver.WriteModel(r.App.Master.FL, course, int64(offset), io.SeekStart)
-	if err != nil {
+	if err := driver.WriteModel(r.App.Master.FL, &course, int64(offset), io.SeekStart); err != nil {
 		log.Println(err)
 		return
 	}
 
-	r.App.Master.Indices = utils.AddMasterIndex(indices, uint32(id), uint32(offset))
-
-	fmt.Println(r.App.Master.Indices)
-	fmt.Println(course)
+	r.App.Master.Indices = utils.AddMasterIndex(r.App.Master.Indices, uint32(id), uint32(offset))
+	fmt.Println("New master record added:", course)
 }
 
-// UtMaster handles the "ut-m" command for printing entries in the master table.
-func (r *Repository) UtMaster(cmd *cobra.Command, args []string) {
-	r.printMasterTable(true)
-}
-
-// GetMasterAll handles the "get-m -all" command for printing all entries in the master table.
-func (r *Repository) GetMasterAll(cmd *cobra.Command, args []string) {
-	r.printMasterTable(false)
-}
-
-// InsertSlave handles insert-s command for adding entries to the slave table.
+// InsertSlave is a placeholder for adding entries to the slave table.
 func InsertSlave() {
-
+	// Placeholder function.
 }
 
-func (r *Repository) printMasterTable(includeDetails bool) {
-	flFile := r.App.Master.FL
+// UtMaster prints all entries in the master table, including detailed information.
+func (r *Repository) UtMaster(cmd *cobra.Command, args []string) {
+	printMasterData(r.App.Master.FL, true)
+}
 
-	if _, err := flFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Fprintf(os.Stderr, "error seeking file: %s\n", err)
+// GetMaster prints entries from the master table based on ID and optional field names.
+func (r *Repository) GetMaster(cmd *cobra.Command, args []string) {
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "error: 1 argument expected, got %d\n", len(args))
+		cmd.Usage()
 		return
 	}
 
-	var model models.Course
-	var data []models.Course
+	var offset int64
+	var all bool
 
-	for {
-		err := driver.ReadModel(flFile, &model, 0, io.SeekCurrent)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
+	if args[0] == "all" {
+		all = true
+	} else {
+		id, err := strconv.Atoi(args[0])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error parsing ID: %v\n", err)
 			return
 		}
 
-		if model.Presence {
-			data = append(data, model)
-		}
-	}
-
-	headers := []string{"[ID]", "[TITLE]", "[CATEGORY]", "[INSTRUCTOR]"}
-	if includeDetails {
-		headers = append(headers, "[FC_ID]", "[PRESENCE]")
-	}
-
-	headersInterface := make([]interface{}, len(headers))
-	for i, v := range headers {
-		headersInterface[i] = v
-	}
-
-	tbl := table.New(headersInterface...).WithWriter(os.Stdout).WithPadding(4)
-
-	for _, entry := range data {
-		stringTitle := utils.ByteArrayToString(entry.Title[:])
-		stringCategory := utils.ByteArrayToString(entry.Category[:])
-		stringInstructor := utils.ByteArrayToString(entry.Instructor[:])
-
-		row := []interface{}{entry.ID, stringTitle, stringCategory, stringInstructor}
-		if includeDetails {
-			row = append(row, entry.FirstSlaveID, entry.Presence)
+		address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(id))
+		if !ok {
+			fmt.Fprintf(os.Stderr, "record with ID %d not found\n", id)
+			return
 		}
 
-		tbl.AddRow(row...)
+		offset = int64(address)
 	}
 
-	tbl.Print()
+	queries := make([]string, 0, len(args)-1)
+	for _, q := range args[1:] {
+		queries = append(queries, strings.ToLower(q))
+	}
+
+	printMasterQuery(r.App.Master.FL, offset, queries, all)
 }

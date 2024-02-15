@@ -10,66 +10,65 @@ import (
 	"strings"
 )
 
-// AddMasterIndex adds an index and a corresponding address of the new entry to Master.
+// AddMasterIndex appends a new index and its corresponding address to the master indices list, then sorts the list.
 func AddMasterIndex(indices []driver.IndexTable, id uint32, address uint32) []driver.IndexTable {
 	entry := driver.IndexTable{
 		Index:   id,
 		Address: address,
 	}
-
 	indices = append(indices, entry)
-	fmt.Printf("Added a new record with id [%d] at address [%d]\n", id, address)
-
-	return indices
+	fmt.Printf("Added a new record with ID [%d] at address [%d].\n", id, address)
+	return SortIndices(indices)
 }
 
-// WriteMasterIndices writes indices to the .ind file.
+// WriteMasterIndices writes the sorted indices to the specified .ind file.
 func WriteMasterIndices(indFile *os.File, indices []driver.IndexTable) {
 	sorted := SortIndices(indices)
-
-	err := driver.WriteModel(indFile, sorted, 0, io.SeekStart)
-	if err != nil {
-		log.Println(err)
-		return
+	if err := driver.WriteModel(indFile, sorted, 0, io.SeekStart); err != nil {
+		log.Printf("Error writing indices: %v\n", err)
+	} else {
+		log.Println("Master IND written successfully.")
 	}
-
-	log.Println("Wrote Master IND")
 }
 
-// RecordExists checks if a record with the given ID already exists in the master table.
+// RecordExists checks for the existence of a record with the specified ID in the master table.
 func RecordExists(indices []driver.IndexTable, id uint32) bool {
 	for _, entry := range indices {
 		if id == entry.Index {
 			return true
 		}
 	}
-
 	return false
 }
 
-// SortIndices sorts entries of an IndexTable in ascending order by their indices.
+// SortIndices sorts the IndexTable entries in ascending order by index.
 func SortIndices(indices []driver.IndexTable) []driver.IndexTable {
-	sort.Slice(indices, func(i int, j int) bool {
-		return indices[i].Index < indices[j].Index
-	})
-
-	log.Println("Sorted!")
-	log.Println(indices)
-
+	sort.Slice(indices, func(i, j int) bool { return indices[i].Index < indices[j].Index })
+	log.Println("Indices sorted.")
 	return indices
 }
 
-// NumberOfRecords return the number of records in a table using index table.
+// NumberOfRecords calculates the total number of records using the index table.
 func NumberOfRecords(indices []driver.IndexTable) int {
 	return len(indices)
 }
 
-// NumberOfSubrecords TODO
+// NumberOfSubrecords (placeholder) calculates the number of subrecords associated with a given ID.
 func NumberOfSubrecords(indices []driver.IndexTable, id uint32) int {
+	// Implementation pending.
 	return 0
 }
 
-// ByteArrayToString converts a byte array to a string.
+// ByteArrayToString converts a byte array into a string, trimming trailing null bytes.
 func ByteArrayToString(bytes []byte) string {
 	return strings.TrimRight(string(bytes), "\x00")
+}
+
+// GetAddressByIndex performs a binary search on the indices slice to find the address associated with the specified index.
+func GetAddressByIndex(indices []driver.IndexTable, id uint32) (uint32, bool) {
+	i := sort.Search(len(indices), func(i int) bool { return indices[i].Index >= id })
+	if i < len(indices) && indices[i].Index == id {
+		return indices[i].Address, true
+	}
+	return 0, false
 }

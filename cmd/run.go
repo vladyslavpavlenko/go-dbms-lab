@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// run execute cmd commands
+// run executes cmd commands in a shell-like environment
 func run(rootCmd *cobra.Command, reader *bufio.Reader) error {
 	for {
 		fmt.Print("> ")

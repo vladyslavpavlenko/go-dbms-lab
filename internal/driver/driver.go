@@ -3,31 +3,28 @@ package driver
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 )
 
-// IndexTable holds fields of an index table.
+// IndexTable defines the structure for index table entries, holding an index and its corresponding address.
 type IndexTable struct {
 	Index   uint32
 	Address uint32
 }
 
-// Table holds file connections and data needed for a table.
+// Table encapsulates file connections and indices for a table, along with the size of its model.
 type Table struct {
-	FL      *os.File
-	IND     *os.File
-	Indices []IndexTable
-	Size    int
+	FL      *os.File     // File connection for data
+	IND     *os.File     // File connection for index
+	Indices []IndexTable // List of indices
+	Size    int          // Size of the model stored in the table
 }
 
-// NewTable creates a new Table.
+// NewTable initializes a new Table instance with given file connections and model size.
 func NewTable(fl *os.File, ind *os.File, indices []IndexTable, model any) *Table {
 	indices, _ = LoadIndices(ind)
-
 	return &Table{
 		FL:      fl,
 		IND:     ind,
@@ -36,83 +33,68 @@ func NewTable(fl *os.File, ind *os.File, indices []IndexTable, model any) *Table
 	}
 }
 
-// CreateTable creates both .fl and .ind files to represent a table and returns a Table.
+// CreateTable creates files for a new table (.fl and .ind) based on the given name and model, returning the Table instance.
 func CreateTable(name string, model any) (*Table, error) {
 	flName := fmt.Sprintf("%s.fl", name)
 	flFile, err := os.OpenFile(flName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("error creating .fl file: %s", err))
+		return nil, fmt.Errorf("error creating .fl file: %w", err)
 	}
 
 	indName := fmt.Sprintf("%s.ind", name)
 	indFile, err := os.OpenFile(indName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("error creating .ind file: %s", err))
+		return nil, fmt.Errorf("error creating .ind file: %w", err)
 	}
 
-	conn := NewTable(flFile, indFile, []IndexTable{}, model)
-
-	return conn, err
+	table := NewTable(flFile, indFile, []IndexTable{}, model)
+	return table, nil
 }
 
-// ReadModel reads data from a file to a model.
+// ReadModel reads a model from the specified file at a given offset and position.
 func ReadModel(file *os.File, model any, offset int64, whence int) error {
 	if _, err := file.Seek(offset, whence); err != nil {
 		return err
 	}
-
-	err := binary.Read(file, binary.BigEndian, model)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return binary.Read(file, binary.BigEndian, model)
 }
 
-// WriteModel writes model to a binary .fl file.
+// WriteModel writes a model's binary representation to a file at the specified offset and position.
 func WriteModel(file *os.File, model any, offset int64, whence int) error {
 	if _, err := file.Seek(offset, whence); err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("error seeking file: %w", err)
 	}
 
 	var binBuf bytes.Buffer
-	err := binary.Write(&binBuf, binary.BigEndian, model)
-	if err != nil {
-		return errors.New(fmt.Sprintf("error writing binary representation: %s", err))
+	if err := binary.Write(&binBuf, binary.BigEndian, model); err != nil {
+		return fmt.Errorf("error writing binary representation: %w", err)
 	}
 
-	_, err = file.Write(binBuf.Bytes())
-	if err != nil {
-		return errors.New(fmt.Sprintf("error writing to file: %s", err))
+	if _, err := file.Write(binBuf.Bytes()); err != nil {
+		return fmt.Errorf("error writing to file: %w", err)
 	}
 
 	return nil
 }
 
-// LoadIndices loads an existing IndexTable from an .ind file  when the application starts.
+// LoadIndices reads IndexTable entries from an .ind file, initializing the table's indices.
 func LoadIndices(indFile *os.File) ([]IndexTable, error) {
 	if _, err := indFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Fprintf(os.Stderr, fmt.Sprintf("error reading data: %s", err))
+		fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
 		return nil, err
 	}
 
 	var indices []IndexTable
-	var model IndexTable
-
 	for {
+		var model IndexTable
 		err := ReadModel(indFile, &model, 0, io.SeekCurrent)
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Fprintf(os.Stderr, fmt.Sprintf("error reading data: %s", err))
+			fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
 			return nil, err
 		}
-
 		indices = append(indices, model)
-	}
-
-	for _, d := range indices {
-		fmt.Println(d)
 	}
 
 	return indices, nil
