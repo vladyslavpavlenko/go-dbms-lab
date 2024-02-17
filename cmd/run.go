@@ -20,7 +20,7 @@ func run(rootCmd *cobra.Command, reader *bufio.Reader) error {
 
 		input = strings.TrimSpace(input)
 		if input == "exit" {
-			fmt.Println("Exiting...")
+			fmt.Println("exiting...")
 			return nil
 		}
 

@@ -47,6 +47,12 @@ func CreateTable(name string, model any) (*Table, error) {
 		return nil, fmt.Errorf("error creating .ind file: %w", err)
 	}
 
+	// reserve a place for garbage
+	err = WriteModel(flFile, model, 0, io.SeekStart)
+	if err != nil {
+		return nil, fmt.Errorf("error reserving a place for garbage: %w", err)
+	}
+
 	table := NewTable(flFile, indFile, []IndexTable{}, model)
 	return table, nil
 }
@@ -76,10 +82,6 @@ func WriteModel(file *os.File, model any, offset int64, whence int) error {
 
 	return nil
 }
-
-//// UpdateModel updates a model in a specified field.
-//func UpdateModel(file *os.File, model any, offset int64, whence int) error {
-//}
 
 // LoadIndices reads IndexTable entries from an .ind file, initializing the table's indices.
 func LoadIndices(indFile *os.File) ([]IndexTable, error) {

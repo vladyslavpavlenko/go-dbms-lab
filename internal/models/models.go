@@ -1,8 +1,8 @@
 package models
 
 type Master struct {
-	FirstSlaveID int64
-	Presence     bool
+	FirstSlaveAddress int64
+	Presence          bool
 }
 
 type Slave struct {

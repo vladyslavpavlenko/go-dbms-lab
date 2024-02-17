@@ -35,5 +35,4 @@ func main() {
 
 	utils.WriteIndices(app.Master.IND, app.Master.Indices)
 	utils.WriteIndices(app.Slave.IND, app.Slave.Indices)
-
 }

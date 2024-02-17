@@ -7,6 +7,7 @@ import (
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
+	"log"
 	"os"
 	"slices"
 	"sort"
@@ -16,8 +17,8 @@ import (
 
 // printMasterData prints the master table data to stdout. If includeDetails is true, additional fields
 // are included in the output.
-func printMasterData(flFile *os.File, includeDetails bool) {
-	if _, err := flFile.Seek(0, io.SeekStart); err != nil {
+func printMasterData(flFile *os.File, offset int64, includeDetails bool) {
+	if _, err := flFile.Seek(offset, io.SeekStart); err != nil {
 		fmt.Printf("error seeking file: %s\n", err)
 		return
 	}
@@ -48,7 +49,7 @@ func printMasterData(flFile *os.File, includeDetails bool) {
 
 	headers := []string{"ID", "TITLE", "CATEGORY", "INSTRUCTOR"}
 	if includeDetails {
-		headers = append(headers, "FS_ID", "PRESENCE")
+		headers = append(headers, "FS_ADDRESS", "PRESENCE")
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
@@ -63,7 +64,7 @@ func printMasterData(flFile *os.File, includeDetails bool) {
 
 		row := []string{stringID, stringTitle, stringCategory, stringInstructor}
 		if includeDetails {
-			row = append(row, fmt.Sprintf("%v", entry.FirstSlaveID), fmt.Sprintf("%v", entry.Presence))
+			row = append(row, fmt.Sprintf("%v", entry.FirstSlaveAddress), fmt.Sprintf("%v", entry.Presence))
 		}
 
 		table.Append(row)
@@ -76,7 +77,7 @@ func printMasterData(flFile *os.File, includeDetails bool) {
 // all records are printed.
 func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool) {
 	if all {
-		_, err := flFile.Seek(0, io.SeekStart)
+		_, err := flFile.Seek(offset, io.SeekStart)
 		if err != nil {
 			return
 		}
@@ -100,8 +101,8 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 				headers = append(headers, "CATEGORY")
 			case "INSTRUCTOR":
 				headers = append(headers, "INSTRUCTOR")
-			case "FS_ID":
-				headers = append(headers, "FS_ID")
+			case "FS_ADDRESS":
+				headers = append(headers, "FS_ADDRESS")
 			case "PRESENCE":
 				headers = append(headers, "PRESENCE")
 			default:
@@ -132,6 +133,7 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 		}
 
 		if model.Presence == false {
+			log.Println("checking for presence...")
 			continue
 		}
 
@@ -146,8 +148,8 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 				row = append(row, utils.ByteArrayToString(model.Category[:]))
 			case "INSTRUCTOR":
 				row = append(row, utils.ByteArrayToString(model.Instructor[:]))
-			case "FS_ID":
-				row = append(row, strconv.Itoa(int(model.FirstSlaveID)))
+			case "FS_ADDRESS":
+				row = append(row, strconv.Itoa(int(model.FirstSlaveAddress)))
 			case "PRESENCE":
 				row = append(row, strconv.FormatBool(model.Presence))
 			}
@@ -164,8 +166,8 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 
 // printSlaveQuery prints selected fields from the slave table based on provided field queries.
 // If all is true, all records are printed. If courseIDFilter is not -1, it filters records by course ID.
-func printSlaveQuery(flFile *os.File, id int, firstID int64, queries []string, all bool) {
-	_, err := flFile.Seek(0, io.SeekStart)
+func printSlaveQuery(flFile *os.File, offset int64, id int, fsAddress int64, queries []string, all bool) {
+	_, err := flFile.Seek(offset, io.SeekStart)
 	if err != nil {
 		fmt.Println("Failed to seek file:", err)
 		return
@@ -196,20 +198,21 @@ func printSlaveQuery(flFile *os.File, id int, firstID int64, queries []string, a
 	table.SetHeader(headers)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 
-	var offset = firstID
-	if firstID == -1 {
-		offset = 0
-	}
+	// whence := io.SeekCurrent
 
 	for {
 		var model models.Certificate
-
-		err := driver.ReadModel(flFile, &model, offset, io.SeekCurrent)
+		err := driver.ReadModel(flFile, &model, 0, io.SeekCurrent)
 		if err == io.EOF {
 			break
 		} else if err != nil {
 			fmt.Printf("Error reading slave data: %s\n", err)
 			return
+		}
+
+		if model.Presence == false {
+			log.Println("checking for presence...")
+			continue
 		}
 
 		if courseIDFilter != -1 && int(model.CourseID) != courseIDFilter {
@@ -247,8 +250,8 @@ func printSlaveQuery(flFile *os.File, id int, firstID int64, queries []string, a
 
 // printSlaveData prints the slave table data to stdout. If includeDetails is true, additional fields
 // are included in the output.
-func printSlaveData(flFile *os.File, includeDetails bool) {
-	if _, err := flFile.Seek(0, io.SeekStart); err != nil {
+func printSlaveData(flFile *os.File, offset int64, includeDetails bool) {
+	if _, err := flFile.Seek(offset, io.SeekStart); err != nil {
 		fmt.Printf("error seeking file: %s\n", err)
 		return
 	}
@@ -300,4 +303,32 @@ func printSlaveData(flFile *os.File, includeDetails bool) {
 	}
 
 	table.Render()
+}
+
+func deleteSubrecords(flFile *os.File, address int64) {
+	for {
+		var model models.Certificate
+
+		err := driver.ReadModel(flFile, &model, address, io.SeekStart)
+		if err != nil {
+			log.Println("error reading slave")
+			return
+		}
+
+		model.Presence = false
+
+		err = driver.WriteModel(flFile, &model, address, io.SeekStart)
+		if err != nil {
+			log.Println("error updating slave")
+			return
+		}
+
+		log.Println("slave record deleted")
+
+		if model.Next != 0 {
+			address = model.Next
+		} else {
+			return
+		}
+	}
 }

@@ -12,31 +12,30 @@ import (
 	"strings"
 )
 
-// CalcMaster calculates and prints the number of entries in the master table, optionally calculating the number
-// of entries in the slave table by Master entry's ID.
-func (r *Repository) CalcMaster(_ *cobra.Command, args []string) {
-	if len(args) >= 1 {
+// CalcMaster calculates and prints the number of entries in the master table.
+func (r *Repository) CalcMaster(_ *cobra.Command, _ []string) {
+	fmt.Println(utils.NumberOfRecords(r.App.Master.Indices))
+}
+
+// CalcSlave calculates and prints the number of entries in the slave table.
+func (r *Repository) CalcSlave(_ *cobra.Command, args []string) {
+	if len(args) > 0 {
 		id, err := strconv.Atoi(args[0])
 		if err != nil {
 			fmt.Printf("error parsing ID: %v\n", err)
 			return
 		}
-		fmt.Printf("ID is %d\n", id)
+		fmt.Println(utils.NumberOfSubrecords(r.App.Slave.Indices, uint32(id)))
 	} else {
-		fmt.Println(utils.NumberOfRecords(r.App.Master.Indices))
+		fmt.Println(utils.NumberOfRecords(r.App.Slave.Indices))
 	}
-}
-
-// CalcSlave calculates and prints the number of entries in the slave table.
-func (r *Repository) CalcSlave(_ *cobra.Command, _ []string) {
-	fmt.Println(utils.NumberOfRecords(r.App.Slave.Indices))
 }
 
 // InsertMaster handles adding entries to the master table.
 func (r *Repository) InsertMaster(_ *cobra.Command, args []string) {
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("error parsing <id>: %v\n", err)
+		fmt.Printf("error parsing ID: %v\n", err)
 		return
 	}
 	title, category, instructor := args[1], args[2], args[3]
@@ -45,7 +44,7 @@ func (r *Repository) InsertMaster(_ *cobra.Command, args []string) {
 
 	exists := utils.RecordExists(indices, uint32(id))
 	if exists {
-		fmt.Printf("record with ID [%d] already exists. Use update-m to update a master record\n", id)
+		fmt.Printf("record with ID %d already exists. Use update-m to update a master record\n", id)
 		return
 	}
 
@@ -55,10 +54,10 @@ func (r *Repository) InsertMaster(_ *cobra.Command, args []string) {
 	copy(course.Title[:], title)
 	copy(course.Category[:], category)
 	copy(course.Instructor[:], instructor)
-	course.FirstSlaveID = -1
+	course.FirstSlaveAddress = -1
 	course.Presence = true
 
-	offset := utils.NumberOfRecords(r.App.Master.Indices) * r.App.Master.Size
+	offset := utils.NumberOfRecords(r.App.Master.Indices)*r.App.Master.Size + r.App.Master.Size
 
 	if err := driver.WriteModel(r.App.Master.FL, &course, int64(offset), io.SeekStart); err != nil {
 		log.Println(err)
@@ -69,9 +68,76 @@ func (r *Repository) InsertMaster(_ *cobra.Command, args []string) {
 	log.Println("new master record added:", course)
 }
 
+// InsertSlave handles adding entries to the slave table.
+func (r *Repository) InsertSlave(_ *cobra.Command, args []string) {
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		fmt.Printf("error parsing ID: %v\n", err)
+		return
+	}
+
+	courseID, err := strconv.Atoi(args[1])
+	if err != nil {
+		fmt.Printf("error parsing course ID: %v\n", err)
+		return
+	}
+
+	issuedTo := args[2]
+
+	indices := r.App.Slave.Indices
+	exists := utils.RecordExists(indices, uint32(id))
+	if exists {
+		fmt.Printf("record with ID %d already exists. Use update-s to update a slave record.\n", id)
+		return
+	}
+
+	masterAddress, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
+	if !ok {
+		fmt.Printf("the master record with ID %d was not found\n", id)
+		return
+	}
+
+	var certificate models.Certificate
+	certificate.ID = uint32(id)
+	certificate.CourseID = uint32(courseID)
+	copy(certificate.IssuedTo[:], issuedTo)
+	certificate.Presence = true
+
+	offset := utils.NumberOfRecords(r.App.Slave.Indices)*r.App.Slave.Size + r.App.Slave.Size
+
+	if err := driver.WriteModel(r.App.Slave.FL, &certificate, int64(offset), io.SeekStart); err != nil {
+		log.Println(err)
+		return
+	}
+
+	r.App.Slave.Indices = utils.AddIndex(r.App.Slave.Indices, uint32(id), uint32(offset))
+	log.Println("New slave record added:", certificate)
+
+	var course models.Course
+	err = driver.ReadModel(r.App.Master.FL, &course, int64(masterAddress), io.SeekStart)
+	if err != nil {
+		fmt.Printf("error retrieving master model: %s\n", err)
+		return
+	}
+
+	course.FirstSlaveAddress = int64(offset)
+
+	if err := driver.WriteModel(r.App.Master.FL, &course, int64(masterAddress), io.SeekStart); err != nil {
+		fmt.Printf("error updating master record with ID %d: %s\n", courseID, err)
+		return
+	}
+}
+
 // UtMaster prints all entries in the master table, including detailed information.
 func (r *Repository) UtMaster(_ *cobra.Command, _ []string) {
-	printMasterData(r.App.Master.FL, true)
+	offset := r.App.Master.Size
+	printMasterData(r.App.Master.FL, int64(offset), true)
+}
+
+// UtSlave prints all entries in the slave table, including detailed information.
+func (r *Repository) UtSlave(_ *cobra.Command, _ []string) {
+	offset := r.App.Slave.Size
+	printSlaveData(r.App.Slave.FL, int64(offset), true)
 }
 
 // GetMaster prints entries from the master table based on ID and optional field names.
@@ -85,7 +151,7 @@ func (r *Repository) GetMaster(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	var offset int64
+	var offset = int64(r.App.Master.Size)
 	var all bool
 
 	if args[0] == "all" {
@@ -103,7 +169,7 @@ func (r *Repository) GetMaster(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		offset = int64(address)
+		offset += int64(address)
 	}
 
 	queries := make([]string, 0, len(args)-1)
@@ -138,8 +204,9 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 	}
 
 	var courseID int
-	var firstID int64 = -1
+	var fsAddress int64 = -1
 	var queries []string
+	offset := r.App.Slave.Size
 
 	if len(args) > 1 {
 		queries = make([]string, 0, len(args)-1)
@@ -153,7 +220,7 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 		} else {
 			exists := utils.RecordExists(r.App.Master.Indices, uint32(courseID))
 			if !exists {
-				fmt.Printf("master record with ID [%d] does not exist\n", courseID)
+				fmt.Printf("master record with ID %d does not exist\n", courseID)
 				return
 			}
 
@@ -170,11 +237,12 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 				return
 			}
 
-			firstID = model.FirstSlaveID
+			fsAddress = model.FirstSlaveAddress
+			offset = int(fsAddress)
 		}
 	}
 
-	printSlaveQuery(r.App.Slave.FL, id, firstID, queries, all)
+	printSlaveQuery(r.App.Slave.FL, int64(offset), id, fsAddress, queries, all)
 }
 
 // UpdateMaster updates fields of the entry by its ID.
@@ -186,7 +254,7 @@ func (r *Repository) UpdateMaster(_ *cobra.Command, args []string) {
 
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("error parsing <id>: %v\n", err)
+		fmt.Printf("error parsing ID: %v\n", err)
 		return
 	}
 
@@ -203,20 +271,22 @@ func (r *Repository) UpdateMaster(_ *cobra.Command, args []string) {
 		return
 	}
 
-	if len(args) > 1 && args[1] != "*" {
+	if len(args) > 1 && args[1] != "-" {
 		clear(course.Title[:])
 		copy(course.Title[:], args[1])
 	}
 
-	if len(args) > 2 && args[2] != "*" {
+	if len(args) > 2 && args[2] != "-" {
 		clear(course.Category[:])
 		copy(course.Category[:], args[2])
 	}
 
-	if len(args) > 3 && args[3] != "*" {
+	if len(args) > 3 && args[3] != "-" {
 		clear(course.Instructor[:])
 		copy(course.Instructor[:], args[3])
 	}
+
+	address += uint32(r.App.Master.Size)
 
 	if err := driver.WriteModel(r.App.Master.FL, &course, int64(address), io.SeekStart); err != nil {
 		fmt.Printf("error updating record: %s\n", err)
@@ -235,7 +305,7 @@ func (r *Repository) UpdateSlave(_ *cobra.Command, args []string) {
 
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("error parsing <id>: %v\n", err)
+		fmt.Printf("error parsing ID: %v\n", err)
 		return
 	}
 
@@ -268,10 +338,11 @@ func (r *Repository) UpdateSlave(_ *cobra.Command, args []string) {
 	log.Println("Slave record updated:", certificate)
 }
 
-func (r *Repository) DeleteMaster(_ *cobra.Command, args []string) {
+// DeleteMaster deletes a master record by its ID.
+func (r *Repository) DeleteMaster(cmd *cobra.Command, args []string) {
 	id, err := strconv.Atoi(args[0])
 	if err != nil {
-		fmt.Printf("error parsing <id>: %v\n", err)
+		fmt.Printf("error parsing ID: %v\n", err)
 		return
 	}
 
@@ -295,72 +366,12 @@ func (r *Repository) DeleteMaster(_ *cobra.Command, args []string) {
 		return
 	}
 
-	log.Printf("model with id %d was deleted", id)
+	deleteSubrecords(r.App.Slave.FL, course.FirstSlaveAddress)
+
+	log.Printf("model with id %d was logically deleted", id)
 }
 
-// InsertSlave is a placeholder for adding entries to the slave table.
-func (r *Repository) InsertSlave(_ *cobra.Command, args []string) {
-	id, err := strconv.Atoi(args[0])
-	if err != nil {
-		fmt.Printf("error parsing <id>: %v\n", err)
-		return
-	}
+// DeleteSlave deletes a slave record by its ID.
+func (r *Repository) DeleteSlave(cmd *cobra.Command, args []string) {
 
-	courseID, err := strconv.Atoi(args[1])
-	if err != nil {
-		fmt.Printf("error parsing <course_id>: %v\n", err)
-		return
-	}
-
-	issuedTo := args[2]
-
-	indices := r.App.Slave.Indices
-	exists := utils.RecordExists(indices, uint32(id))
-	if exists {
-		fmt.Printf("record with ID %d already exists. Use update-s to update a slave record.\n", id)
-		return
-	}
-
-	masterAddress, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
-	if !ok {
-		fmt.Printf("the master record with ID %d was not found\n", id)
-		return
-	}
-
-	var certificate models.Certificate
-	certificate.ID = uint32(id)
-	certificate.CourseID = uint32(courseID)
-	copy(certificate.IssuedTo[:], issuedTo)
-	certificate.Presence = true
-
-	offset := utils.NumberOfRecords(r.App.Slave.Indices) * r.App.Slave.Size
-
-	if err := driver.WriteModel(r.App.Slave.FL, &certificate, int64(offset), io.SeekStart); err != nil {
-		log.Println(err)
-		return
-	}
-
-	r.App.Slave.Indices = utils.AddIndex(r.App.Slave.Indices, uint32(id), uint32(offset))
-	log.Println("New slave record added:", certificate)
-
-	var course models.Course
-	err = driver.ReadModel(r.App.Master.FL, &course, int64(masterAddress), io.SeekStart)
-	if err != nil {
-		fmt.Printf("error retrieving master model: %s\n", err)
-		return
-	}
-
-	if course.FirstSlaveID == -1 {
-		course.FirstSlaveID = int64(masterAddress)
-	}
-
-	if err := driver.WriteModel(r.App.Master.FL, &course, int64(masterAddress), io.SeekStart); err != nil {
-		fmt.Printf("error updating master record with ID %d: %s\n", courseID, err)
-		return
-	}
-}
-
-// UtSlave prints all entries in the slave table, including detailed information.
-func (r *Repository) UtSlave(_ *cobra.Command, _ []string) {
-	printSlaveData(r.App.Slave.FL, true)
 }

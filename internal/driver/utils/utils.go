@@ -53,10 +53,9 @@ func NumberOfRecords(indices []driver.IndexTable) int {
 	return len(indices)
 }
 
-// NumberOfSubrecords (placeholder) calculates the number of subrecords associated with a given ID.
+// NumberOfSubrecords calculates the number of subrecords, optionally associated with a given ID.
 func NumberOfSubrecords(indices []driver.IndexTable, id uint32) int {
-	// Implementation pending.
-	return 0
+	return len(indices)
 }
 
 // ByteArrayToString converts a byte array into a string, trimming trailing null bytes.
