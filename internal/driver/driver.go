@@ -77,10 +77,14 @@ func WriteModel(file *os.File, model any, offset int64, whence int) error {
 	return nil
 }
 
+//// UpdateModel updates a model in a specified field.
+//func UpdateModel(file *os.File, model any, offset int64, whence int) error {
+//}
+
 // LoadIndices reads IndexTable entries from an .ind file, initializing the table's indices.
 func LoadIndices(indFile *os.File) ([]IndexTable, error) {
 	if _, err := indFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
+		fmt.Printf("error reading data: %s\n", err)
 		return nil, err
 	}
 
@@ -91,7 +95,7 @@ func LoadIndices(indFile *os.File) ([]IndexTable, error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
+			fmt.Printf("error reading data: %s\n", err)
 			return nil, err
 		}
 		indices = append(indices, model)

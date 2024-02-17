@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -17,7 +18,7 @@ import (
 // are included in the output.
 func printMasterData(flFile *os.File, includeDetails bool) {
 	if _, err := flFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Fprintf(os.Stderr, "error seeking file: %s\n", err)
+		fmt.Printf("error seeking file: %s\n", err)
 		return
 	}
 
@@ -29,7 +30,7 @@ func printMasterData(flFile *os.File, includeDetails bool) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
+			fmt.Printf("error reading data: %s\n", err)
 			return
 		}
 
@@ -42,6 +43,8 @@ func printMasterData(flFile *os.File, includeDetails bool) {
 
 		data = append(data, model)
 	}
+
+	sort.Slice(data, func(i, j int) bool { return data[i].ID < data[j].ID })
 
 	headers := []string{"ID", "TITLE", "CATEGORY", "INSTRUCTOR"}
 	if includeDetails {
@@ -73,18 +76,23 @@ func printMasterData(flFile *os.File, includeDetails bool) {
 // all records are printed.
 func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool) {
 	if all {
-		flFile.Seek(0, io.SeekStart)
+		_, err := flFile.Seek(0, io.SeekStart)
+		if err != nil {
+			return
+		}
 	} else {
-		flFile.Seek(offset, io.SeekStart)
+		_, err := flFile.Seek(offset, io.SeekStart)
+		if err != nil {
+			return
+		}
 	}
 
 	headers := []string{"ID"}
 
 	if len(queries) != 0 {
 		for _, query := range queries {
-			fieldName := strings.ToUpper(query)
 
-			switch fieldName {
+			switch query {
 			case "ID":
 			case "TITLE":
 				headers = append(headers, "TITLE")
@@ -97,7 +105,7 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 			case "PRESENCE":
 				headers = append(headers, "PRESENCE")
 			default:
-				fmt.Fprintf(os.Stderr, "field '%s' was not found\n", query)
+				fmt.Printf("field '%s' was not found\n", strings.ToLower(query))
 			}
 		}
 	} else {
@@ -105,7 +113,7 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 	}
 
 	if len(headers) == 1 && !slices.Contains(queries, "id") {
-		fmt.Fprintln(os.Stderr, "nothing to show")
+		fmt.Println("nothing to show")
 		return
 	}
 
@@ -119,7 +127,7 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Fprintf(os.Stderr, "error reading data: %s\n", err)
+			fmt.Printf("error reading data: %s\n", err)
 			return
 		}
 
@@ -145,6 +153,146 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 		if !all {
 			break
 		}
+	}
+
+	table.Render()
+}
+
+// printSlaveQuery prints selected fields from the slave table based on provided field queries.
+// If all is true, all records are printed. If courseIDFilter is not -1, it filters records by course ID.
+func printSlaveQuery(flFile *os.File, id int, firstID int64, queries []string, all bool) {
+	_, err := flFile.Seek(0, io.SeekStart)
+	if err != nil {
+		fmt.Println("Failed to seek file:", err)
+		return
+	}
+
+	headers := []string{"ID", "COURSE_ID", "ISSUED_TO"}
+
+	courseIDFilter := -1
+	if len(queries) > 0 && all {
+		parsedID, err := strconv.Atoi(queries[0])
+		if err == nil {
+			courseIDFilter = parsedID
+			queries = queries[1:]
+		}
+	}
+
+	if len(queries) > 0 {
+		headers = []string{"ID", "COURSE_ID"}
+		for _, query := range queries {
+			switch strings.ToUpper(query) {
+			case "ISSUED_TO", "NEXT", "PRESENCE":
+				headers = append(headers, query)
+			}
+		}
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader(headers)
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+
+	var offset = firstID
+	if firstID == -1 {
+		offset = 0
+	}
+
+	for {
+		var model models.Certificate
+
+		err := driver.ReadModel(flFile, &model, offset, io.SeekCurrent)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Printf("Error reading slave data: %s\n", err)
+			return
+		}
+
+		if courseIDFilter != -1 && int(model.CourseID) != courseIDFilter {
+			offset = model.Next
+			continue
+		}
+
+		var row []string
+		for _, header := range headers {
+			switch header {
+			case "ID":
+				row = append(row, strconv.Itoa(int(model.ID)))
+			case "COURSE_ID":
+				row = append(row, strconv.Itoa(int(model.CourseID)))
+			case "ISSUED_TO":
+				row = append(row, utils.ByteArrayToString(model.IssuedTo[:]))
+			case "NEXT":
+				row = append(row, strconv.Itoa(int(model.Next)))
+			case "PRESENCE":
+				row = append(row, strconv.FormatBool(model.Presence))
+			}
+		}
+
+		table.Append(row)
+
+		if !all {
+			break
+		}
+
+		offset = model.Next
+	}
+
+	table.Render()
+}
+
+// printSlaveData prints the slave table data to stdout. If includeDetails is true, additional fields
+// are included in the output.
+func printSlaveData(flFile *os.File, includeDetails bool) {
+	if _, err := flFile.Seek(0, io.SeekStart); err != nil {
+		fmt.Printf("error seeking file: %s\n", err)
+		return
+	}
+
+	var model models.Certificate
+	var data []models.Certificate
+
+	for {
+		err := driver.ReadModel(flFile, &model, 0, io.SeekCurrent)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Printf("error reading data: %s\n", err)
+			return
+		}
+
+		if includeDetails {
+			if !model.Presence {
+				data = append(data, model)
+				continue
+			}
+		}
+
+		data = append(data, model)
+	}
+
+	sort.Slice(data, func(i, j int) bool { return data[i].ID < data[j].ID })
+
+	headers := []string{"ID", "COURSE_ID", "ISSUED_TO"}
+	if includeDetails {
+		headers = append(headers, "NEXT", "PRESENCE")
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader(headers)
+	table.SetAlignment(tablewriter.ALIGN_LEFT)
+
+	for _, entry := range data {
+		stringID := strconv.Itoa(int(entry.ID))
+		stringCourseID := strconv.Itoa(int(entry.CourseID))
+		stringIssuedTo := utils.ByteArrayToString(entry.IssuedTo[:])
+
+		row := []string{stringID, stringCourseID, stringIssuedTo}
+		if includeDetails {
+			row = append(row, fmt.Sprintf("%v", entry.Next), fmt.Sprintf("%v", entry.Presence))
+		}
+
+		table.Append(row)
 	}
 
 	table.Render()

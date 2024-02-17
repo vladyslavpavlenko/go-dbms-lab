@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/config"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
+	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"log"
 	"os"
@@ -12,12 +13,17 @@ import (
 var app config.AppConfig
 
 func main() {
-	conn, err := driver.CreateTable("courses", models.Course{})
+	master, err := driver.CreateTable("courses", models.Course{})
 	if err != nil {
 		log.Fatal(err)
 	}
+	app.Master = master
 
-	app.Master = conn
+	slave, err := driver.CreateTable("certificates", models.Certificate{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	app.Slave = slave
 
 	rootCmd := commands(&app)
 	reader := bufio.NewReader(os.Stdin)
@@ -26,4 +32,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	utils.WriteIndices(app.Master.IND, app.Master.Indices)
+	utils.WriteIndices(app.Slave.IND, app.Slave.Indices)
+
 }

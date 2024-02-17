@@ -6,7 +6,8 @@ type Master struct {
 }
 
 type Slave struct {
-	Next int64
+	Presence bool
+	Next     int64
 }
 
 // Course is the course model.

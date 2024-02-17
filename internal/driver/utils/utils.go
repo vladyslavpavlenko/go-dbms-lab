@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// AddMasterIndex appends a new index and its corresponding address to the master indices list, then sorts the list.
-func AddMasterIndex(indices []driver.IndexTable, id uint32, address uint32) []driver.IndexTable {
+// AddIndex appends a new index and its corresponding address to the master indices list, then sorts the list.
+func AddIndex(indices []driver.IndexTable, id uint32, address uint32) []driver.IndexTable {
 	entry := driver.IndexTable{
 		Index:   id,
 		Address: address,
@@ -21,13 +21,13 @@ func AddMasterIndex(indices []driver.IndexTable, id uint32, address uint32) []dr
 	return SortIndices(indices)
 }
 
-// WriteMasterIndices writes the sorted indices to the specified .ind file.
-func WriteMasterIndices(indFile *os.File, indices []driver.IndexTable) {
+// WriteIndices writes the sorted indices to the specified .ind file.
+func WriteIndices(indFile *os.File, indices []driver.IndexTable) {
 	sorted := SortIndices(indices)
 	if err := driver.WriteModel(indFile, sorted, 0, io.SeekStart); err != nil {
 		log.Printf("Error writing indices: %v\n", err)
 	} else {
-		log.Println("Master IND written successfully.")
+		log.Printf("%s written successfully.\n", indFile.Name())
 	}
 }
 
