@@ -268,8 +268,34 @@ func (r *Repository) UpdateSlave(_ *cobra.Command, args []string) {
 	log.Println("Slave record updated:", certificate)
 }
 
-func (r *Repository) DeleteMaster(_ *cobra.Command, _ []string) {
+func (r *Repository) DeleteMaster(_ *cobra.Command, args []string) {
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		fmt.Printf("error parsing <id>: %v\n", err)
+		return
+	}
 
+	address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(id))
+	if !ok {
+		fmt.Printf("the record with ID %d was not found\n", id)
+		return
+	}
+
+	var course models.Course
+	err = driver.ReadModel(r.App.Master.FL, &course, int64(address), io.SeekStart)
+	if err != nil {
+		fmt.Printf("error retrieving model: %s\n", err)
+		return
+	}
+
+	course.Presence = false
+
+	if err := driver.WriteModel(r.App.Master.FL, &course, int64(address), io.SeekStart); err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Printf("model with id %d was deleted", id)
 }
 
 // InsertSlave is a placeholder for adding entries to the slave table.
@@ -317,7 +343,6 @@ func (r *Repository) InsertSlave(_ *cobra.Command, args []string) {
 	r.App.Slave.Indices = utils.AddIndex(r.App.Slave.Indices, uint32(id), uint32(offset))
 	log.Println("New slave record added:", certificate)
 
-	// update first_slave_id
 	var course models.Course
 	err = driver.ReadModel(r.App.Master.FL, &course, int64(masterAddress), io.SeekStart)
 	if err != nil {

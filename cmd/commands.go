@@ -84,7 +84,7 @@ func commands(app *config.AppConfig) *cobra.Command {
 	var cmdDeleteM = &cobra.Command{
 		Use:   "del-m <id>",
 		Short: "Deletes entry by its ID.",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  cobra.ExactArgs(1),
 		Run:   handlers.Repo.DeleteMaster,
 	}
 

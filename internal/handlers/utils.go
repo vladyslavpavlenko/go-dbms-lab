@@ -131,6 +131,10 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 			return
 		}
 
+		if model.Presence == false {
+			continue
+		}
+
 		var row []string
 		for _, header := range headers {
 			switch strings.ToUpper(header) {
