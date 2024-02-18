@@ -35,7 +35,7 @@ func commands(app *config.AppConfig) *cobra.Command {
 	var cmdCalcS = &cobra.Command{
 		Use:   "calc-s",
 		Short: "Calculates the number of entries in the slave table.",
-		Args:  cobra.ExactArgs(0),
+		Args:  cobra.MaximumNArgs(1),
 		Run:   handlers.Repo.CalcSlave,
 	}
 
@@ -88,6 +88,13 @@ func commands(app *config.AppConfig) *cobra.Command {
 		Run:   handlers.Repo.DeleteMaster,
 	}
 
+	var cmdDeleteS = &cobra.Command{
+		Use:   "del-s <id>",
+		Short: "Deletes entry by its ID.",
+		Args:  cobra.ExactArgs(1),
+		Run:   handlers.Repo.DeleteSlave,
+	}
+
 	rootCmd.AddCommand(cmdInsertM)
 	rootCmd.AddCommand(cmdCalcM)
 	rootCmd.AddCommand(cmdUtM)
@@ -100,7 +107,7 @@ func commands(app *config.AppConfig) *cobra.Command {
 	rootCmd.AddCommand(cmdUtS)
 	rootCmd.AddCommand(cmdGetS)
 	rootCmd.AddCommand(cmdUpdateS)
-	//rootCmd.AddCommand(cmdDeleteS)
+	rootCmd.AddCommand(cmdDeleteS)
 
 	return rootCmd
 }

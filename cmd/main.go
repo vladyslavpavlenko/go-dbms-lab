@@ -13,13 +13,16 @@ import (
 var app config.AppConfig
 
 func main() {
-	master, err := driver.CreateTable("courses", models.Course{})
+	masterName := "courses"
+	slaveName := "certificates"
+
+	master, err := driver.CreateTable(masterName, models.Course{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	app.Master = master
 
-	slave, err := driver.CreateTable("certificates", models.Certificate{})
+	slave, err := driver.CreateTable(slaveName, models.Certificate{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -33,6 +36,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	utils.WriteIndices(app.Master.IND, app.Master.Indices)
-	utils.WriteIndices(app.Slave.IND, app.Slave.Indices)
+	err = utils.WriteServiceData(masterName, app.Master.Indices, app.Master.Junk)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = utils.WriteServiceData(slaveName, app.Slave.Indices, app.Slave.Junk)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

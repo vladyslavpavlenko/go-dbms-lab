@@ -23,5 +23,6 @@ go.work
 # Other
 .idea/
 *.fl
+*.jk
 *.ind
 *.txt

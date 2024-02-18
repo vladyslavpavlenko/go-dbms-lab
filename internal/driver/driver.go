@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"os"
 )
 
@@ -14,22 +15,33 @@ type IndexTable struct {
 	Address uint32
 }
 
-// Table encapsulates file connections and indices for a table, along with the size of its model.
+// Table encapsulates file connection and indices for a table, along with the size of its model.
 type Table struct {
 	FL      *os.File     // File connection for data
-	IND     *os.File     // File connection for index
 	Indices []IndexTable // List of indices
+	Junk    []uint32     // List of addresses of unused space
 	Size    int          // Size of the model stored in the table
 }
 
 // NewTable initializes a new Table instance with given file connections and model size.
-func NewTable(fl *os.File, ind *os.File, indices []IndexTable, model any) *Table {
-	indices, _ = LoadIndices(ind)
+func NewTable(fl *os.File, ind *os.File, jk *os.File, model any) *Table {
+	size := binary.Size(model)
+
+	indices, err := LoadIndices(ind)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	junk, err := LoadJunk(jk)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return &Table{
 		FL:      fl,
-		IND:     ind,
 		Indices: indices,
-		Size:    binary.Size(model),
+		Junk:    junk,
+		Size:    size,
 	}
 }
 
@@ -46,14 +58,16 @@ func CreateTable(name string, model any) (*Table, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating .ind file: %w", err)
 	}
+	defer indFile.Close()
 
-	// reserve a place for garbage
-	err = WriteModel(flFile, model, 0, io.SeekStart)
+	jkName := fmt.Sprintf("%s.jk", name)
+	jkFile, err := os.OpenFile(jkName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("error reserving a place for garbage: %w", err)
+		return nil, fmt.Errorf("error creating .ind file: %w", err)
 	}
+	defer jkFile.Close()
 
-	table := NewTable(flFile, indFile, []IndexTable{}, model)
+	table := NewTable(flFile, indFile, jkFile, model)
 	return table, nil
 }
 
@@ -103,5 +117,32 @@ func LoadIndices(indFile *os.File) ([]IndexTable, error) {
 		indices = append(indices, model)
 	}
 
+	log.Println("indices loaded: ", indices)
+
 	return indices, nil
+}
+
+// LoadJunk reads junk addresses from a .jk file, initializing the unused space slice.
+func LoadJunk(jkFile *os.File) ([]uint32, error) {
+	if _, err := jkFile.Seek(0, io.SeekStart); err != nil {
+		fmt.Printf("error reading data: %s\n", err)
+		return nil, err
+	}
+
+	var junk []uint32
+	for {
+		var address uint32
+		err := ReadModel(jkFile, &address, 0, io.SeekCurrent)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Printf("error reading data: %s\n", err)
+			return nil, err
+		}
+		junk = append(junk, address)
+	}
+
+	log.Println("junk loaded: ", junk)
+
+	return junk, nil
 }

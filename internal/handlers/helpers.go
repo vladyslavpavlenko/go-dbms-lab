@@ -10,68 +10,9 @@ import (
 	"log"
 	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 )
-
-// printMasterData prints the master table data to stdout. If includeDetails is true, additional fields
-// are included in the output.
-func printMasterData(flFile *os.File, offset int64, includeDetails bool) {
-	if _, err := flFile.Seek(offset, io.SeekStart); err != nil {
-		fmt.Printf("error seeking file: %s\n", err)
-		return
-	}
-
-	var model models.Course
-	var data []models.Course
-
-	for {
-		err := driver.ReadModel(flFile, &model, 0, io.SeekCurrent)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			fmt.Printf("error reading data: %s\n", err)
-			return
-		}
-
-		if includeDetails {
-			if !model.Presence {
-				data = append(data, model)
-				continue
-			}
-		}
-
-		data = append(data, model)
-	}
-
-	sort.Slice(data, func(i, j int) bool { return data[i].ID < data[j].ID })
-
-	headers := []string{"ID", "TITLE", "CATEGORY", "INSTRUCTOR"}
-	if includeDetails {
-		headers = append(headers, "FS_ADDRESS", "PRESENCE")
-	}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader(headers)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-
-	for _, entry := range data {
-		stringID := strconv.Itoa(int(entry.ID))
-		stringTitle := utils.ByteArrayToString(entry.Title[:])
-		stringCategory := utils.ByteArrayToString(entry.Category[:])
-		stringInstructor := utils.ByteArrayToString(entry.Instructor[:])
-
-		row := []string{stringID, stringTitle, stringCategory, stringInstructor}
-		if includeDetails {
-			row = append(row, fmt.Sprintf("%v", entry.FirstSlaveAddress), fmt.Sprintf("%v", entry.Presence))
-		}
-
-		table.Append(row)
-	}
-
-	table.Render()
-}
 
 // printMasterQuery prints selected fields from the master table based on provided field queries. If all is true,
 // all records are printed.
@@ -133,7 +74,7 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 		}
 
 		if model.Presence == false {
-			log.Println("checking for presence...")
+			log.Println("entry is not present...")
 			continue
 		}
 
@@ -188,7 +129,7 @@ func printSlaveQuery(flFile *os.File, offset int64, id int, fsAddress int64, que
 		headers = []string{"ID", "COURSE_ID"}
 		for _, query := range queries {
 			switch strings.ToUpper(query) {
-			case "ISSUED_TO", "NEXT", "PRESENCE":
+			case "ISSUED_TO", "PREVIOUS", "NEXT", "PRESENCE":
 				headers = append(headers, query)
 			}
 		}
@@ -198,15 +139,13 @@ func printSlaveQuery(flFile *os.File, offset int64, id int, fsAddress int64, que
 	table.SetHeader(headers)
 	table.SetAlignment(tablewriter.ALIGN_LEFT)
 
-	// whence := io.SeekCurrent
-
 	for {
 		var model models.Certificate
 		err := driver.ReadModel(flFile, &model, 0, io.SeekCurrent)
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Printf("Error reading slave data: %s\n", err)
+			fmt.Printf("rrror reading slave data: %s\n", err)
 			return
 		}
 
@@ -229,6 +168,8 @@ func printSlaveQuery(flFile *os.File, offset int64, id int, fsAddress int64, que
 				row = append(row, strconv.Itoa(int(model.CourseID)))
 			case "ISSUED_TO":
 				row = append(row, utils.ByteArrayToString(model.IssuedTo[:]))
+			case "PREVIOUS":
+				row = append(row, strconv.Itoa(int(model.Previous)))
 			case "NEXT":
 				row = append(row, strconv.Itoa(int(model.Next)))
 			case "PRESENCE":
@@ -248,87 +189,33 @@ func printSlaveQuery(flFile *os.File, offset int64, id int, fsAddress int64, que
 	table.Render()
 }
 
-// printSlaveData prints the slave table data to stdout. If includeDetails is true, additional fields
-// are included in the output.
-func printSlaveData(flFile *os.File, offset int64, includeDetails bool) {
-	if _, err := flFile.Seek(offset, io.SeekStart); err != nil {
-		fmt.Printf("error seeking file: %s\n", err)
-		return
-	}
-
-	var model models.Certificate
-	var data []models.Certificate
-
-	for {
-		err := driver.ReadModel(flFile, &model, 0, io.SeekCurrent)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			fmt.Printf("error reading data: %s\n", err)
-			return
-		}
-
-		if includeDetails {
-			if !model.Presence {
-				data = append(data, model)
-				continue
-			}
-		}
-
-		data = append(data, model)
-	}
-
-	sort.Slice(data, func(i, j int) bool { return data[i].ID < data[j].ID })
-
-	headers := []string{"ID", "COURSE_ID", "ISSUED_TO"}
-	if includeDetails {
-		headers = append(headers, "NEXT", "PRESENCE")
-	}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader(headers)
-	table.SetAlignment(tablewriter.ALIGN_LEFT)
-
-	for _, entry := range data {
-		stringID := strconv.Itoa(int(entry.ID))
-		stringCourseID := strconv.Itoa(int(entry.CourseID))
-		stringIssuedTo := utils.ByteArrayToString(entry.IssuedTo[:])
-
-		row := []string{stringID, stringCourseID, stringIssuedTo}
-		if includeDetails {
-			row = append(row, fmt.Sprintf("%v", entry.Next), fmt.Sprintf("%v", entry.Presence))
-		}
-
-		table.Append(row)
-	}
-
-	table.Render()
-}
-
-func deleteSubrecords(flFile *os.File, address int64) {
-	for {
+func (r *Repository) deleteSubrecords(flFile *os.File, address int64) {
+	for address != -1 {
 		var model models.Certificate
 
 		err := driver.ReadModel(flFile, &model, address, io.SeekStart)
 		if err != nil {
-			log.Println("error reading slave")
-			return
+			log.Printf("error reading slave record for deletion: %s\n", err)
+			break
 		}
 
+		nextAddress := model.Next
+
+		clear(model.IssuedTo[:])
+		model.Next = -1
 		model.Presence = false
+
+		r.App.Slave.Junk = append(r.App.Slave.Junk, uint32(address))
+		r.App.Slave.Indices = utils.RemoveIndex(r.App.Slave.Indices, model.ID)
 
 		err = driver.WriteModel(flFile, &model, address, io.SeekStart)
 		if err != nil {
-			log.Println("error updating slave")
-			return
+			log.Println("error updating slave record to mark as deleted:", err)
+			break
 		}
 
-		log.Println("slave record deleted")
+		log.Printf("deleted slave record at address %d\n", address)
 
-		if model.Next != 0 {
-			address = model.Next
-		} else {
-			return
-		}
+		address = nextAddress
 	}
 }
