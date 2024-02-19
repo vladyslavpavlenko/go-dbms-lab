@@ -5,7 +5,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"os"
@@ -34,10 +33,10 @@ func (r *Repository) UtMaster(_ *cobra.Command, _ []string) {
 			return
 		}
 
-		if !model.Presence {
-			data = append(data, model)
-			continue
-		}
+		//if !model.Presence {
+		//	data = append(data, model)
+		//	continue
+		//}
 
 		data = append(data, model)
 	}
@@ -52,9 +51,9 @@ func (r *Repository) UtMaster(_ *cobra.Command, _ []string) {
 
 	for _, entry := range data {
 		stringID := strconv.Itoa(int(entry.ID))
-		stringTitle := utils.ByteArrayToString(entry.Title[:])
-		stringCategory := utils.ByteArrayToString(entry.Category[:])
-		stringInstructor := utils.ByteArrayToString(entry.Instructor[:])
+		stringTitle := driver.ByteArrayToString(entry.Title[:])
+		stringCategory := driver.ByteArrayToString(entry.Category[:])
+		stringInstructor := driver.ByteArrayToString(entry.Instructor[:])
 
 		row := []string{stringID, stringTitle, stringCategory, stringInstructor}
 		row = append(row, fmt.Sprintf("%v", entry.FirstSlaveAddress), fmt.Sprintf("%v", entry.Presence))
@@ -85,10 +84,10 @@ func (r *Repository) UtSlave(_ *cobra.Command, _ []string) {
 			return
 		}
 
-		if !model.Presence {
-			data = append(data, model)
-			continue
-		}
+		//if !model.Presence {
+		//	data = append(data, model)
+		//	continue
+		//}
 
 		data = append(data, model)
 	}
@@ -104,7 +103,7 @@ func (r *Repository) UtSlave(_ *cobra.Command, _ []string) {
 	for _, entry := range data {
 		stringID := strconv.Itoa(int(entry.ID))
 		stringCourseID := strconv.Itoa(int(entry.CourseID))
-		stringIssuedTo := utils.ByteArrayToString(entry.IssuedTo[:])
+		stringIssuedTo := driver.ByteArrayToString(entry.IssuedTo[:])
 
 		row := []string{stringID, stringCourseID, stringIssuedTo}
 		row = append(row, fmt.Sprintf("%v", entry.Previous), fmt.Sprintf("%v", entry.Next), fmt.Sprintf("%v", entry.Presence))

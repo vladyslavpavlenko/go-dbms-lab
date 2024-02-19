@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/olekukonko/tablewriter"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"log"
@@ -84,11 +83,11 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 			case "ID":
 				row = append(row, strconv.Itoa(int(model.ID)))
 			case "TITLE":
-				row = append(row, utils.ByteArrayToString(model.Title[:]))
+				row = append(row, driver.ByteArrayToString(model.Title[:]))
 			case "CATEGORY":
-				row = append(row, utils.ByteArrayToString(model.Category[:]))
+				row = append(row, driver.ByteArrayToString(model.Category[:]))
 			case "INSTRUCTOR":
-				row = append(row, utils.ByteArrayToString(model.Instructor[:]))
+				row = append(row, driver.ByteArrayToString(model.Instructor[:]))
 			case "FS_ADDRESS":
 				row = append(row, strconv.Itoa(int(model.FirstSlaveAddress)))
 			case "PRESENCE":
@@ -167,7 +166,7 @@ func printSlaveQuery(flFile *os.File, offset int64, queries []string, all bool) 
 			case "COURSE_ID":
 				row = append(row, strconv.Itoa(int(model.CourseID)))
 			case "ISSUED_TO":
-				row = append(row, utils.ByteArrayToString(model.IssuedTo[:]))
+				row = append(row, driver.ByteArrayToString(model.IssuedTo[:]))
 			case "PREVIOUS":
 				row = append(row, strconv.Itoa(int(model.Previous)))
 			case "NEXT":
@@ -207,7 +206,7 @@ func (r *Repository) deleteSubrecords(flFile *os.File, address int64) {
 		model.Presence = false
 
 		r.App.Slave.Junk = append(r.App.Slave.Junk, uint32(address))
-		r.App.Slave.Indices = utils.RemoveIndex(r.App.Slave.Indices, model.ID)
+		r.App.Slave.Indices = driver.RemoveIndex(r.App.Slave.Indices, model.ID)
 
 		err = driver.WriteModel(flFile, &model, address, io.SeekStart)
 		if err != nil {

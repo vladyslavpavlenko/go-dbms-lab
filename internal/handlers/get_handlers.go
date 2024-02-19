@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"strconv"
@@ -34,7 +33,7 @@ func (r *Repository) GetMaster(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(id))
+		address, ok := driver.GetAddressByIndex(r.App.Master.Indices, uint32(id))
 		if !ok {
 			fmt.Printf("record with ID %d not found\n", id)
 			return
@@ -73,7 +72,7 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		exists := utils.RecordExists(r.App.Slave.Indices, uint32(id))
+		exists := driver.RecordExists(r.App.Slave.Indices, uint32(id))
 		if !exists {
 			fmt.Printf("slave record with ID %d does not exist\n", id)
 			return
@@ -96,13 +95,13 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 			if err != nil {
 				courseID = -1
 			} else {
-				exists := utils.RecordExists(r.App.Master.Indices, uint32(courseID))
+				exists := driver.RecordExists(r.App.Master.Indices, uint32(courseID))
 				if !exists {
 					fmt.Printf("master record with ID %d does not exist\n", courseID)
 					return
 				}
 
-				address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
+				address, ok := driver.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
 				if !ok {
 					fmt.Printf("record with ID %d not found\n", courseID)
 					return
@@ -122,7 +121,7 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 	}
 
 	if !all {
-		address, ok := utils.GetAddressByIndex(r.App.Slave.Indices, uint32(id))
+		address, ok := driver.GetAddressByIndex(r.App.Slave.Indices, uint32(id))
 		if !ok {
 			fmt.Printf("error getting index of the slave record with id %d: %s\n", id, err)
 			return

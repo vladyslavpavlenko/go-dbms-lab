@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	"os"
 )
+
+// MaxJunkSize defines the maximum allowed size of the junk before recommending compaction.
+const MaxJunkSize int = 12
 
 // IndexTable defines the structure for index table entries, holding an index and its corresponding address.
 type IndexTable struct {
@@ -24,7 +26,7 @@ type Table struct {
 }
 
 // NewTable initializes a new Table instance with given file connections and model size.
-func NewTable(fl *os.File, ind *os.File, jk *os.File, model any) *Table {
+func NewTable(fl *os.File, ind *os.File, jk *os.File, model any, withJunk bool) *Table {
 	size := binary.Size(model)
 
 	indices, err := LoadIndices(ind)
@@ -32,9 +34,12 @@ func NewTable(fl *os.File, ind *os.File, jk *os.File, model any) *Table {
 		log.Fatal(err)
 	}
 
-	junk, err := LoadJunk(jk)
-	if err != nil {
-		log.Fatal(err)
+	var junk []uint32
+	if withJunk {
+		junk, err = LoadJunk(jk)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	return &Table{
@@ -46,7 +51,7 @@ func NewTable(fl *os.File, ind *os.File, jk *os.File, model any) *Table {
 }
 
 // CreateTable creates files for a new table (.fl and .ind) based on the given name and model, returning the Table instance.
-func CreateTable(name string, model any) (*Table, error) {
+func CreateTable(name string, model any, withJunk bool) (*Table, error) {
 	flName := fmt.Sprintf("%s.fl", name)
 	flFile, err := os.OpenFile(flName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
@@ -60,14 +65,18 @@ func CreateTable(name string, model any) (*Table, error) {
 	}
 	defer indFile.Close()
 
-	jkName := fmt.Sprintf("%s.jk", name)
-	jkFile, err := os.OpenFile(jkName, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		return nil, fmt.Errorf("error creating .ind file: %w", err)
-	}
-	defer jkFile.Close()
+	var jkFile *os.File
 
-	table := NewTable(flFile, indFile, jkFile, model)
+	if withJunk {
+		jkName := fmt.Sprintf("%s.jk", name)
+		jkFile, err = os.OpenFile(jkName, os.O_RDWR|os.O_CREATE, 0666)
+		if err != nil {
+			return nil, fmt.Errorf("error creating .ind file: %w", err)
+		}
+		defer jkFile.Close()
+	}
+
+	table := NewTable(flFile, indFile, jkFile, model, withJunk)
 	return table, nil
 }
 
@@ -97,52 +106,77 @@ func WriteModel(file *os.File, model any, offset int64, whence int) error {
 	return nil
 }
 
-// LoadIndices reads IndexTable entries from an .ind file, initializing the table's indices.
-func LoadIndices(indFile *os.File) ([]IndexTable, error) {
-	if _, err := indFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Printf("error reading data: %s\n", err)
-		return nil, err
+// CompactMasterFile handles master file compaction.
+//func CompactMasterFile(flFile, indFile, jkFile *os.File) error {
+//	var model models.Course
+//	var data []models.Course
+//
+//	// Read all the entries from the flFile
+//	for {
+//		err := ReadModel(flFile, &model, 0, io.SeekCurrent)
+//		if err == io.EOF {
+//			break
+//		} else if err != nil {
+//			fmt.Printf("error reading data: %s\n", err)
+//			return err
+//		}
+//
+//		if !model.Presence {
+//			continue
+//		}
+//
+//		data = append(data, model)
+//	}
+//
+//	var index IndexTable
+//	var data []models.Course
+//
+//	for {
+//		err := ReadModel(indFile, &index, 0, io.SeekStart)
+//		if err == io.EOF {
+//			break
+//		} else if err != nil {
+//			fmt.Printf("error reading index: %s\n", err)
+//			return err
+//		}
+//
+//		// Process index to decide on compaction, perhaps adjusting `data` slice or planning rewrites
+//	}
+//
+//	// Assuming jkFile is read to identify spaces for reuse, implement as needed
+//
+//	// Truncate the original file to rewrite compacted data
+//	err := flFile.Truncate(0)
+//	if err != nil {
+//		fmt.Printf("error truncating file: %s\n", err)
+//		return err
+//	}
+//
+//	// Reset file pointer to the beginning to start rewriting data
+//	_, err = flFile.Seek(0, io.SeekStart)
+//	if err != nil {
+//		fmt.Printf("error seeking in file: %s\n", err)
+//		return err
+//	}
+//
+//	for _, model := range data {
+//		err := WriteModel(flFile, &model, 0, io.SeekStart)
+//		if err != nil {
+//			fmt.Printf("error writing model: %s\n", err)
+//			return err
+//		}
+//	}
+//
+//	return nil
+//}
+
+// TruncateFile truncates the given file to a specific length.
+func TruncateFile(file *os.File, address int64) error {
+	err := file.Truncate(address)
+	if err != nil {
+		fmt.Printf("error truncating file: %v\n", err)
+		return err
 	}
 
-	var indices []IndexTable
-	for {
-		var model IndexTable
-		err := ReadModel(indFile, &model, 0, io.SeekCurrent)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			fmt.Printf("error reading data: %s\n", err)
-			return nil, err
-		}
-		indices = append(indices, model)
-	}
-
-	log.Println("indices loaded: ", indices)
-
-	return indices, nil
-}
-
-// LoadJunk reads junk addresses from a .jk file, initializing the unused space slice.
-func LoadJunk(jkFile *os.File) ([]uint32, error) {
-	if _, err := jkFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Printf("error reading data: %s\n", err)
-		return nil, err
-	}
-
-	var junk []uint32
-	for {
-		var address uint32
-		err := ReadModel(jkFile, &address, 0, io.SeekCurrent)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			fmt.Printf("error reading data: %s\n", err)
-			return nil, err
-		}
-		junk = append(junk, address)
-	}
-
-	log.Println("junk loaded: ", junk)
-
-	return junk, nil
+	return nil
 }

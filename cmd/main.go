@@ -2,9 +2,10 @@ package main
 
 import (
 	"bufio"
+	"fmt"
+	"github.com/adhocore/chin"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/config"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"log"
 	"os"
@@ -16,16 +17,28 @@ func main() {
 	masterName := "courses"
 	slaveName := "certificates"
 
-	master, err := driver.CreateTable(masterName, models.Course{})
+	master, err := driver.CreateTable(masterName, models.Course{}, false)
 	if err != nil {
 		log.Fatal(err)
 	}
-	app.Master = master
 
-	slave, err := driver.CreateTable(slaveName, models.Certificate{})
+	slave, err := driver.CreateTable(slaveName, models.Certificate{}, true)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	if slave.RequiresCompaction() {
+		if driver.PromptCompactionConfirmation(masterName) {
+			s := chin.New()
+			go s.Start()
+
+			s.Stop()
+		} else {
+			fmt.Println("Skipped")
+		}
+	}
+
+	app.Master = master
 	app.Slave = slave
 
 	rootCmd := commands(&app)
@@ -36,12 +49,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = utils.WriteServiceData(masterName, app.Master.Indices, app.Master.Junk)
+	err = driver.WriteServiceData(masterName, app.Master.Indices, app.Master.Junk)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = utils.WriteServiceData(slaveName, app.Slave.Indices, app.Slave.Junk)
+	err = driver.WriteServiceData(slaveName, app.Slave.Indices, app.Slave.Junk)
 	if err != nil {
 		log.Fatal(err)
 	}

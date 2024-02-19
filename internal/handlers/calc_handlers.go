@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"strconv"
@@ -12,7 +11,7 @@ import (
 
 // CalcMaster handles calculation and printing the number of entries in the master table.
 func (r *Repository) CalcMaster(_ *cobra.Command, _ []string) {
-	fmt.Println(utils.NumberOfRecords(r.App.Master.Indices))
+	fmt.Println(driver.NumberOfRecords(r.App.Master.Indices))
 }
 
 // CalcSlave handles calculation and printing the number of entries in the slave table.
@@ -24,7 +23,7 @@ func (r *Repository) CalcSlave(_ *cobra.Command, args []string) {
 			return
 		}
 
-		address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(id))
+		address, ok := driver.GetAddressByIndex(r.App.Master.Indices, uint32(id))
 		if !ok {
 			fmt.Printf("the record with id %v does not exist\n", err)
 			return
@@ -37,8 +36,8 @@ func (r *Repository) CalcSlave(_ *cobra.Command, args []string) {
 			return
 		}
 
-		fmt.Println(utils.NumberOfSubrecords(r.App.Slave.FL, course.FirstSlaveAddress))
+		fmt.Println(driver.NumberOfSubrecords(r.App.Slave.FL, course.FirstSlaveAddress))
 	} else {
-		fmt.Println(utils.NumberOfRecords(r.App.Slave.Indices))
+		fmt.Println(driver.NumberOfRecords(r.App.Slave.Indices))
 	}
 }

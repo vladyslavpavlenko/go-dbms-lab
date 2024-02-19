@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"log"
@@ -24,7 +23,7 @@ func (r *Repository) UpdateMaster(_ *cobra.Command, args []string) {
 		return
 	}
 
-	address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(id))
+	address, ok := driver.GetAddressByIndex(r.App.Master.Indices, uint32(id))
 	if !ok {
 		fmt.Printf("the record with ID %d was not found\n", id)
 		return
@@ -73,7 +72,7 @@ func (r *Repository) UpdateSlave(_ *cobra.Command, args []string) {
 		return
 	}
 
-	address, ok := utils.GetAddressByIndex(r.App.Slave.Indices, uint32(id))
+	address, ok := driver.GetAddressByIndex(r.App.Slave.Indices, uint32(id))
 	if !ok {
 		fmt.Printf("the record with ID %d was not found\n", id)
 		return

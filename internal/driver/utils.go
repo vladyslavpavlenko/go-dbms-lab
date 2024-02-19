@@ -1,8 +1,8 @@
-package utils
+package driver
 
 import (
+	"bufio"
 	"fmt"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"log"
@@ -12,8 +12,8 @@ import (
 )
 
 // AddIndex appends a new index and its corresponding address to the indices list, then sorts the list.
-func AddIndex(indices []driver.IndexTable, id uint32, address uint32) []driver.IndexTable {
-	entry := driver.IndexTable{
+func AddIndex(indices []IndexTable, id uint32, address uint32) []IndexTable {
+	entry := IndexTable{
 		Index:   id,
 		Address: address,
 	}
@@ -23,7 +23,7 @@ func AddIndex(indices []driver.IndexTable, id uint32, address uint32) []driver.I
 }
 
 // RemoveIndex removes an index and its corresponding address from the indices list, then sorts the list.
-func RemoveIndex(indices []driver.IndexTable, id uint32) []driver.IndexTable {
+func RemoveIndex(indices []IndexTable, id uint32) []IndexTable {
 	for i, entry := range indices {
 		if entry.Index == id {
 			indices = append(indices[:i], indices[i+1:]...)
@@ -34,8 +34,20 @@ func RemoveIndex(indices []driver.IndexTable, id uint32) []driver.IndexTable {
 	return indices
 }
 
+// UpdateAddress updates the address of the entry in the indices list, then sorts the list.
+func UpdateAddress(indices []IndexTable, lastRecordID uint32, newAddress uint32) []IndexTable {
+	for i, entry := range indices {
+		if entry.Index == lastRecordID {
+			log.Printf("updated the record with ID %d: [%d -> %d]\n", lastRecordID, entry.Address, newAddress)
+			indices[i].Address = newAddress
+			break
+		}
+	}
+	return SortIndices(indices)
+}
+
 // WriteIndices writes the sorted indices to the specified .ind file.
-func WriteIndices(indFile *os.File, indices []driver.IndexTable) {
+func WriteIndices(indFile *os.File, indices []IndexTable) {
 	sorted := SortIndices(indices)
 
 	if err := indFile.Truncate(0); err != nil {
@@ -48,7 +60,7 @@ func WriteIndices(indFile *os.File, indices []driver.IndexTable) {
 		return
 	}
 
-	if err := driver.WriteModel(indFile, sorted, 0, io.SeekStart); err != nil {
+	if err := WriteModel(indFile, sorted, 0, io.SeekStart); err != nil {
 		log.Printf("error writing indices: %v\n", err)
 	} else {
 		log.Printf("%s written successfully.\n", indFile.Name())
@@ -67,7 +79,7 @@ func WriteJunk(jkFile *os.File, junk []uint32) {
 		return
 	}
 
-	if err := driver.WriteModel(jkFile, junk, 0, io.SeekStart); err != nil {
+	if err := WriteModel(jkFile, junk, 0, io.SeekStart); err != nil {
 		log.Printf("error writing junk: %v\n", err)
 	} else {
 		log.Printf("%s written successfully.\n", jkFile.Name())
@@ -75,7 +87,7 @@ func WriteJunk(jkFile *os.File, junk []uint32) {
 }
 
 // RecordExists checks for the existence of a record with the specified ID in the master table.
-func RecordExists(indices []driver.IndexTable, id uint32) bool {
+func RecordExists(indices []IndexTable, id uint32) bool {
 	for _, entry := range indices {
 		if id == entry.Index {
 			return true
@@ -85,14 +97,14 @@ func RecordExists(indices []driver.IndexTable, id uint32) bool {
 }
 
 // SortIndices sorts the IndexTable entries in ascending order by index.
-func SortIndices(indices []driver.IndexTable) []driver.IndexTable {
+func SortIndices(indices []IndexTable) []IndexTable {
 	sort.Slice(indices, func(i, j int) bool { return indices[i].Index < indices[j].Index })
 	log.Println("Indices sorted.")
 	return indices
 }
 
 // NumberOfRecords calculates the total number of records using the index table.
-func NumberOfRecords(indices []driver.IndexTable) int {
+func NumberOfRecords(indices []IndexTable) int {
 	return len(indices)
 }
 
@@ -103,7 +115,7 @@ func NumberOfSubrecords(flFile *os.File, firstSlaveAddress int64) int {
 
 	for nextAddress != -1 {
 		var slave models.Certificate
-		err := driver.ReadModel(flFile, &slave, int64(nextAddress), io.SeekStart)
+		err := ReadModel(flFile, &slave, int64(nextAddress), io.SeekStart)
 		if err != nil {
 			fmt.Printf("error reading slave model: %v\n", err)
 			break
@@ -123,7 +135,7 @@ func ByteArrayToString(bytes []byte) string {
 }
 
 // GetAddressByIndex performs a binary search on the indices slice to find the address associated with the specified index.
-func GetAddressByIndex(indices []driver.IndexTable, id uint32) (uint32, bool) {
+func GetAddressByIndex(indices []IndexTable, id uint32) (uint32, bool) {
 	i := sort.Search(len(indices), func(i int) bool { return indices[i].Index >= id })
 	if i < len(indices) && indices[i].Index == id {
 		return indices[i].Address, true
@@ -132,7 +144,7 @@ func GetAddressByIndex(indices []driver.IndexTable, id uint32) (uint32, bool) {
 }
 
 // WriteServiceData writes index table and junk addresses to the service files (.ind, .jk).
-func WriteServiceData(fileName string, indices []driver.IndexTable, junk []uint32) error {
+func WriteServiceData(fileName string, indices []IndexTable, junk []uint32) error {
 	indName := fmt.Sprintf("%s.ind", fileName)
 	indFile, err := os.OpenFile(indName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
@@ -151,4 +163,84 @@ func WriteServiceData(fileName string, indices []driver.IndexTable, junk []uint3
 	WriteJunk(jkFile, junk)
 
 	return nil
+}
+
+// PromptCompactionConfirmation prompts the user to confirm files compaction.
+func PromptCompactionConfirmation(fileName string) bool {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("%s takes too much space and can be compacted. Do you want to proceed? [Y/n]: ", fileName)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read input: %v\n", err)
+		return false
+	}
+	response = strings.TrimSpace(response)
+	return strings.ToLower(response) == "y" || response == ""
+}
+
+// RequiresCompaction checks if the total size of the junk exceeds a predefined threshold.
+func (t *Table) RequiresCompaction() bool {
+	totalJunkSize := len(t.Junk) * t.Size
+
+	return totalJunkSize > MaxJunkSize
+}
+
+// LoadIndices reads IndexTable entries from an .ind file, initializing the table's indices.
+func LoadIndices(indFile *os.File) ([]IndexTable, error) {
+	if _, err := indFile.Seek(0, io.SeekStart); err != nil {
+		fmt.Printf("error reading data: %s\n", err)
+		return nil, err
+	}
+
+	var indices []IndexTable
+	for {
+		var model IndexTable
+		err := ReadModel(indFile, &model, 0, io.SeekCurrent)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Printf("error reading data: %s\n", err)
+			return nil, err
+		}
+		indices = append(indices, model)
+	}
+
+	log.Println("indices loaded: ", indices)
+
+	return indices, nil
+}
+
+// LoadJunk reads junk addresses from a .jk file, initializing the unused space slice.
+func LoadJunk(jkFile *os.File) ([]uint32, error) {
+	if _, err := jkFile.Seek(0, io.SeekStart); err != nil {
+		fmt.Printf("error reading data: %s\n", err)
+		return nil, err
+	}
+
+	var junk []uint32
+	for {
+		var address uint32
+		err := ReadModel(jkFile, &address, 0, io.SeekCurrent)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			fmt.Printf("error reading data: %s\n", err)
+			return nil, err
+		}
+		junk = append(junk, address)
+	}
+
+	log.Println("junk loaded: ", junk)
+
+	return junk, nil
+}
+
+// GetLastRecordAddress returns the address of the last record in the master file.
+func GetLastRecordAddress(indices []IndexTable) (uint32, bool) {
+	if len(indices) == 0 {
+		log.Println("no records found in the index table")
+		return 0, false
+	}
+	lastIndex := indices[len(indices)-1]
+	return lastIndex.Address, true
 }

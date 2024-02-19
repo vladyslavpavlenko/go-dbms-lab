@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"log"
@@ -22,7 +21,7 @@ func (r *Repository) InsertMaster(_ *cobra.Command, args []string) {
 
 	indices := r.App.Master.Indices
 
-	exists := utils.RecordExists(indices, uint32(id))
+	exists := driver.RecordExists(indices, uint32(id))
 	if exists {
 		fmt.Printf("record with ID %d already exists. Use update-m to update a master record\n", id)
 		return
@@ -37,16 +36,7 @@ func (r *Repository) InsertMaster(_ *cobra.Command, args []string) {
 	course.FirstSlaveAddress = -1
 	course.Presence = true
 
-	var offset int64
-	if len(r.App.Master.Junk) > 0 {
-		log.Println("reusing space from a deleted record")
-		offset = int64(r.App.Master.Junk[0])
-		r.App.Master.Junk = r.App.Master.Junk[1:]
-		log.Println("junk:", r.App.Master.Junk)
-	} else {
-		log.Println("no garbage found")
-		offset, _ = r.App.Master.FL.Seek(int64(len(r.App.Master.Indices)*r.App.Master.Size), io.SeekStart)
-	}
+	offset, _ := r.App.Master.FL.Seek(int64(len(r.App.Master.Indices)*r.App.Master.Size), io.SeekStart)
 
 	log.Println("offset:", offset)
 
@@ -55,7 +45,7 @@ func (r *Repository) InsertMaster(_ *cobra.Command, args []string) {
 		return
 	}
 
-	r.App.Master.Indices = utils.AddIndex(r.App.Master.Indices, uint32(id), uint32(offset))
+	r.App.Master.Indices = driver.AddIndex(r.App.Master.Indices, uint32(id), uint32(offset))
 	log.Println("new master record added:", course)
 }
 
@@ -75,7 +65,7 @@ func (r *Repository) InsertSlave(_ *cobra.Command, args []string) {
 
 	issuedTo := args[2]
 
-	exists := utils.RecordExists(r.App.Slave.Indices, uint32(id))
+	exists := driver.RecordExists(r.App.Slave.Indices, uint32(id))
 	if exists {
 		fmt.Printf("record with ID %d already exists. Use update-s to update a slave record.\n", id)
 		return
@@ -83,7 +73,7 @@ func (r *Repository) InsertSlave(_ *cobra.Command, args []string) {
 
 	var course models.Course
 
-	masterAddress, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
+	masterAddress, ok := driver.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
 	if !ok {
 		fmt.Printf("the master record with ID %d was not found\n", courseID)
 		return
@@ -156,7 +146,7 @@ func (r *Repository) InsertSlave(_ *cobra.Command, args []string) {
 	}
 
 	// Update indices with the correct offset after potentially using junk space or appending.
-	r.App.Slave.Indices = utils.AddIndex(r.App.Slave.Indices, uint32(id), uint32(offset))
+	r.App.Slave.Indices = driver.AddIndex(r.App.Slave.Indices, uint32(id), uint32(offset))
 
 	log.Println("New slave record added:", newCertificate)
 }

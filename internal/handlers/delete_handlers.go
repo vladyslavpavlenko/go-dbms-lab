@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
-	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver/utils"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
 	"log"
@@ -19,7 +18,7 @@ func (r *Repository) DeleteMaster(_ *cobra.Command, args []string) {
 		return
 	}
 
-	address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(id))
+	address, ok := driver.GetAddressByIndex(r.App.Master.Indices, uint32(id))
 	if !ok {
 		fmt.Printf("the record with ID %d was not found\n", id)
 		return
@@ -32,26 +31,52 @@ func (r *Repository) DeleteMaster(_ *cobra.Command, args []string) {
 		return
 	}
 
-	r.deleteSubrecords(r.App.Slave.FL, course.FirstSlaveAddress)
+	if course.FirstSlaveAddress != -1 {
+		r.deleteSubrecords(r.App.Slave.FL, course.FirstSlaveAddress)
+	}
 
-	clear(course.Title[:])
-	clear(course.Category[:])
-	clear(course.Instructor[:])
-	course.FirstSlaveAddress = -1
-	course.Presence = false
-
-	r.App.Master.Junk = append(r.App.Master.Junk, address)
-	r.App.Master.Indices = utils.RemoveIndex(r.App.Master.Indices, uint32(id))
-
-	if err := driver.WriteModel(r.App.Master.FL, &course, int64(address), io.SeekStart); err != nil {
-		log.Println(err)
+	lastRecordAddress, ok := driver.GetLastRecordAddress(r.App.Master.Indices)
+	if !ok {
+		fmt.Printf("error getting last record address: %v\n", err)
 		return
 	}
 
-	log.Printf("model with id %d was logically deleted", id)
+	if lastRecordAddress == address {
+		log.Println("deleting last entry")
 
-	log.Println("Master garbage:", r.App.Master.Junk)
-	log.Println("Slave garbage:", r.App.Slave.Junk)
+		r.App.Master.Indices = driver.RemoveIndex(r.App.Master.Indices, uint32(id))
+
+		err = driver.TruncateFile(r.App.Master.FL, int64(lastRecordAddress))
+		if err != nil {
+			fmt.Printf("error truncating file: %v\n", err)
+		}
+
+		log.Println("entry deleted")
+		return
+	}
+
+	var lastRecord models.Course
+	err = driver.ReadModel(r.App.Master.FL, &lastRecord, int64(lastRecordAddress), io.SeekStart)
+	if err != nil {
+		fmt.Printf("error reading last record: %v\n", err)
+		return
+	}
+
+	if err := driver.WriteModel(r.App.Master.FL, &lastRecord, int64(address), io.SeekStart); err != nil {
+		log.Printf("error moving last record: %v\n", err)
+		return
+	}
+
+	r.App.Master.Indices = driver.RemoveIndex(r.App.Master.Indices, uint32(id))
+	r.App.Master.Indices = driver.UpdateAddress(r.App.Master.Indices, lastRecord.ID, address)
+
+	err = driver.TruncateFile(r.App.Master.FL, int64(lastRecordAddress))
+	if err != nil {
+		fmt.Printf("error truncating file: %v\n", err)
+	}
+
+	log.Printf("model with id %d was deleted", id)
+	log.Println("Updated indices:", r.App.Master.Indices)
 }
 
 // DeleteSlave handles deletion of the slave record by its ID.
@@ -62,7 +87,7 @@ func (r *Repository) DeleteSlave(_ *cobra.Command, args []string) {
 		return
 	}
 
-	certificateToDeleteAddress, ok := utils.GetAddressByIndex(r.App.Slave.Indices, uint32(id))
+	certificateToDeleteAddress, ok := driver.GetAddressByIndex(r.App.Slave.Indices, uint32(id))
 	if !ok {
 		fmt.Printf("the slave record with ID %d was not found\n", id)
 		return
@@ -77,7 +102,7 @@ func (r *Repository) DeleteSlave(_ *cobra.Command, args []string) {
 
 	courseID := certificateToDelete.CourseID
 
-	courseAddress, ok := utils.GetAddressByIndex(r.App.Master.Indices, courseID)
+	courseAddress, ok := driver.GetAddressByIndex(r.App.Master.Indices, courseID)
 	if !ok {
 		fmt.Printf("error retrieving course: %s\n", err)
 		return
@@ -129,7 +154,7 @@ func (r *Repository) DeleteSlave(_ *cobra.Command, args []string) {
 
 		// Update indices and junk.
 		r.App.Slave.Junk = append(r.App.Slave.Junk, certificateToDeleteAddress)
-		r.App.Slave.Indices = utils.RemoveIndex(r.App.Slave.Indices, uint32(id))
+		r.App.Slave.Indices = driver.RemoveIndex(r.App.Slave.Indices, uint32(id))
 
 		log.Println("deleted first node")
 		return
@@ -182,7 +207,7 @@ func (r *Repository) DeleteSlave(_ *cobra.Command, args []string) {
 
 		// Update indices and junk.
 		r.App.Slave.Junk = append(r.App.Slave.Junk, certificateToDeleteAddress)
-		r.App.Slave.Indices = utils.RemoveIndex(r.App.Slave.Indices, uint32(id))
+		r.App.Slave.Indices = driver.RemoveIndex(r.App.Slave.Indices, uint32(id))
 
 		log.Println("deleted middle node")
 		return
@@ -218,7 +243,7 @@ func (r *Repository) DeleteSlave(_ *cobra.Command, args []string) {
 
 		// Update indices and junk.
 		r.App.Slave.Junk = append(r.App.Slave.Junk, certificateToDeleteAddress)
-		r.App.Slave.Indices = utils.RemoveIndex(r.App.Slave.Indices, uint32(id))
+		r.App.Slave.Indices = driver.RemoveIndex(r.App.Slave.Indices, uint32(id))
 
 		log.Println("deleted last node")
 		return
