@@ -56,14 +56,9 @@ func (r *Repository) DeleteMaster(_ *cobra.Command, args []string) {
 	}
 
 	var lastRecord models.Course
-	err = driver.ReadModel(r.App.Master.FL, &lastRecord, int64(lastRecordAddress), io.SeekStart)
+	err = driver.MoveModel(r.App.Master.FL, &lastRecord, int64(lastRecordAddress), int64(address))
 	if err != nil {
-		fmt.Printf("error reading last record: %v\n", err)
-		return
-	}
-
-	if err := driver.WriteModel(r.App.Master.FL, &lastRecord, int64(address), io.SeekStart); err != nil {
-		log.Printf("error moving last record: %v\n", err)
+		fmt.Printf("error moving entry: %v\n", err)
 		return
 	}
 

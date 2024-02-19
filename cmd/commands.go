@@ -6,6 +6,7 @@ import (
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/handlers"
 )
 
+// commands initializes and returns a root cobra command with all subcommands configured.
 func commands(app *config.AppConfig) *cobra.Command {
 	repo := handlers.NewRepo(app)
 	handlers.NewHandlers(repo)
@@ -26,14 +27,14 @@ func commands(app *config.AppConfig) *cobra.Command {
 	}
 
 	var cmdCalcM = &cobra.Command{
-		Use:   "calc-m [id]",
+		Use:   "calc-m",
 		Short: "Calculates the number of entries in the master table.",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  cobra.NoArgs,
 		Run:   handlers.Repo.CalcMaster,
 	}
 
 	var cmdCalcS = &cobra.Command{
-		Use:   "calc-s",
+		Use:   "calc-s [id]",
 		Short: "Calculates the number of entries in the slave table.",
 		Args:  cobra.MaximumNArgs(1),
 		Run:   handlers.Repo.CalcSlave,

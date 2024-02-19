@@ -8,10 +8,10 @@ import (
 	"strings"
 )
 
-// run executes cmd commands in a shell-like environment
+// run executes cmd commands in a shell-like environment.
 func run(rootCmd *cobra.Command, reader *bufio.Reader) error {
 	for {
-		fmt.Print("> ")
+		fmt.Print("$ ")
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Printf("error reading command: %v\n", err)

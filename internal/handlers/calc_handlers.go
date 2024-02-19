@@ -25,7 +25,7 @@ func (r *Repository) CalcSlave(_ *cobra.Command, args []string) {
 
 		address, ok := driver.GetAddressByIndex(r.App.Master.Indices, uint32(id))
 		if !ok {
-			fmt.Printf("the record with id %v does not exist\n", err)
+			fmt.Printf("master record with id %v does not exist\n", id)
 			return
 		}
 

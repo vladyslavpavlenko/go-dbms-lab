@@ -35,10 +35,10 @@ func RemoveIndex(indices []IndexTable, id uint32) []IndexTable {
 }
 
 // UpdateAddress updates the address of the entry in the indices list, then sorts the list.
-func UpdateAddress(indices []IndexTable, lastRecordID uint32, newAddress uint32) []IndexTable {
+func UpdateAddress(indices []IndexTable, id uint32, newAddress uint32) []IndexTable {
 	for i, entry := range indices {
-		if entry.Index == lastRecordID {
-			log.Printf("updated the record with ID %d: [%d -> %d]\n", lastRecordID, entry.Address, newAddress)
+		if entry.Index == id {
+			log.Printf("updated the record with ID %d: [%d -> %d]\n", id, entry.Address, newAddress)
 			indices[i].Address = newAddress
 			break
 		}
@@ -134,7 +134,7 @@ func ByteArrayToString(bytes []byte) string {
 	return strings.TrimRight(string(bytes), "\x00")
 }
 
-// GetAddressByIndex performs a binary search on the indices slice to find the address associated with the specified index.
+// GetAddressByIndex performs a binary search on the indices slice to find the address associated with the specified ID.
 func GetAddressByIndex(indices []IndexTable, id uint32) (uint32, bool) {
 	i := sort.Search(len(indices), func(i int) bool { return indices[i].Index >= id })
 	if i < len(indices) && indices[i].Index == id {
@@ -144,23 +144,24 @@ func GetAddressByIndex(indices []IndexTable, id uint32) (uint32, bool) {
 }
 
 // WriteServiceData writes index table and junk addresses to the service files (.ind, .jk).
-func WriteServiceData(fileName string, indices []IndexTable, junk []uint32) error {
+func WriteServiceData(fileName string, indices []IndexTable, junk []uint32, withJunk bool) error {
 	indName := fmt.Sprintf("%s.ind", fileName)
 	indFile, err := os.OpenFile(indName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		return fmt.Errorf("error creating .ind file: %w", err)
 	}
 	defer indFile.Close()
-
-	jkName := fmt.Sprintf("%s.jk", fileName)
-	jkFile, err := os.OpenFile(jkName, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
-		return fmt.Errorf("error creating .ind file: %w", err)
-	}
-	defer jkFile.Close()
-
 	WriteIndices(indFile, indices)
-	WriteJunk(jkFile, junk)
+
+	if withJunk {
+		jkName := fmt.Sprintf("%s.jk", fileName)
+		jkFile, err := os.OpenFile(jkName, os.O_RDWR|os.O_CREATE, 0666)
+		if err != nil {
+			return fmt.Errorf("error creating .ind file: %w", err)
+		}
+		defer jkFile.Close()
+		WriteJunk(jkFile, junk)
+	}
 
 	return nil
 }
@@ -168,7 +169,7 @@ func WriteServiceData(fileName string, indices []IndexTable, junk []uint32) erro
 // PromptCompactionConfirmation prompts the user to confirm files compaction.
 func PromptCompactionConfirmation(fileName string) bool {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("%s takes too much space and can be compacted. Do you want to proceed? [Y/n]: ", fileName)
+	fmt.Printf("Table '%s' can be compacted. Do you want to proceed? [Y/n]: ", fileName)
 	response, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to read input: %v\n", err)
@@ -180,9 +181,8 @@ func PromptCompactionConfirmation(fileName string) bool {
 
 // RequiresCompaction checks if the total size of the junk exceeds a predefined threshold.
 func (t *Table) RequiresCompaction() bool {
-	totalJunkSize := len(t.Junk) * t.Size
-
-	return totalJunkSize > MaxJunkSize
+	totalJunkSize := len(t.Junk)
+	return totalJunkSize >= MaxJunkSize
 }
 
 // LoadIndices reads IndexTable entries from an .ind file, initializing the table's indices.

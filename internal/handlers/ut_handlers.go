@@ -33,11 +33,6 @@ func (r *Repository) UtMaster(_ *cobra.Command, _ []string) {
 			return
 		}
 
-		//if !model.Presence {
-		//	data = append(data, model)
-		//	continue
-		//}
-
 		data = append(data, model)
 	}
 
@@ -83,11 +78,6 @@ func (r *Repository) UtSlave(_ *cobra.Command, _ []string) {
 			fmt.Printf("error reading data: %s\n", err)
 			return
 		}
-
-		//if !model.Presence {
-		//	data = append(data, model)
-		//	continue
-		//}
 
 		data = append(data, model)
 	}

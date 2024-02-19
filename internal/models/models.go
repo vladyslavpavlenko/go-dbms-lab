@@ -1,10 +1,12 @@
 package models
 
+// Master represents a master record.
 type Master struct {
 	FirstSlaveAddress int64
 	Presence          bool
 }
 
+// Slave represents a slave record.
 type Slave struct {
 	Previous int64
 	Next     int64

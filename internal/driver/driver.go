@@ -3,13 +3,17 @@ package driver
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
+	"io"
 	"log"
 	"os"
+	"sort"
 )
 
 // MaxJunkSize defines the maximum allowed size of the junk before recommending compaction.
-const MaxJunkSize int = 12
+const MaxJunkSize int = 2
 
 // IndexTable defines the structure for index table entries, holding an index and its corresponding address.
 type IndexTable struct {
@@ -106,69 +110,103 @@ func WriteModel(file *os.File, model any, offset int64, whence int) error {
 	return nil
 }
 
-// CompactMasterFile handles master file compaction.
-//func CompactMasterFile(flFile, indFile, jkFile *os.File) error {
-//	var model models.Course
-//	var data []models.Course
-//
-//	// Read all the entries from the flFile
-//	for {
-//		err := ReadModel(flFile, &model, 0, io.SeekCurrent)
-//		if err == io.EOF {
-//			break
-//		} else if err != nil {
-//			fmt.Printf("error reading data: %s\n", err)
-//			return err
-//		}
-//
-//		if !model.Presence {
-//			continue
-//		}
-//
-//		data = append(data, model)
-//	}
-//
-//	var index IndexTable
-//	var data []models.Course
-//
-//	for {
-//		err := ReadModel(indFile, &index, 0, io.SeekStart)
-//		if err == io.EOF {
-//			break
-//		} else if err != nil {
-//			fmt.Printf("error reading index: %s\n", err)
-//			return err
-//		}
-//
-//		// Process index to decide on compaction, perhaps adjusting `data` slice or planning rewrites
-//	}
-//
-//	// Assuming jkFile is read to identify spaces for reuse, implement as needed
-//
-//	// Truncate the original file to rewrite compacted data
-//	err := flFile.Truncate(0)
-//	if err != nil {
-//		fmt.Printf("error truncating file: %s\n", err)
-//		return err
-//	}
-//
-//	// Reset file pointer to the beginning to start rewriting data
-//	_, err = flFile.Seek(0, io.SeekStart)
-//	if err != nil {
-//		fmt.Printf("error seeking in file: %s\n", err)
-//		return err
-//	}
-//
-//	for _, model := range data {
-//		err := WriteModel(flFile, &model, 0, io.SeekStart)
-//		if err != nil {
-//			fmt.Printf("error writing model: %s\n", err)
-//			return err
-//		}
-//	}
-//
-//	return nil
-//}
+// MoveModel moves a model from one address to another.
+func MoveModel(flFile *os.File, model any, oldAddress, newAddress int64) error {
+	err := ReadModel(flFile, model, oldAddress, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error reading last record: %s", err)
+	}
+
+	log.Println("model:", model)
+
+	if err := WriteModel(flFile, model, newAddress, io.SeekStart); err != nil {
+		return fmt.Errorf("error moving last record: %s", err)
+	}
+
+	return nil
+}
+
+// CompactSlaveFile handles slave file compaction.
+func CompactSlaveFile(flFile *os.File, indices []IndexTable, junk []uint32) ([]uint32, error) {
+	sort.Slice(junk, func(i, j int) bool {
+		return junk[i] < junk[j]
+	})
+	fmt.Println("acs:", junk)
+
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i].Address > indices[j].Address
+	})
+	fmt.Println("desc:", indices)
+
+	var model models.Certificate
+
+	for i := 0; i < len(indices) && i < len(junk) && indices[i].Address > junk[i]; i++ {
+		log.Printf("Moving: %d [%d -> %d]", indices[i].Index, indices[i].Address, junk[i])
+
+		err := MoveModel(flFile, &model, int64(indices[i].Address), int64(junk[i]))
+		if err != nil {
+			return nil, err
+		}
+
+		log.Println("Model:", model)
+
+		UpdateAddress(indices, indices[i].Index, junk[i])
+
+		err = updateLinkedListPointers(flFile, &model, junk[i])
+		if err != nil {
+			return nil, fmt.Errorf("error updating linked list pointers: %w", err)
+		}
+
+		junk = junk[1:]
+	}
+
+	log.Println("Finished compacting!")
+
+	err := TruncateFile(flFile, int64(len(indices)*binary.Size(model)))
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("error trancating file: %s", err))
+	}
+
+	junk = junk[:0]
+
+	log.Println("junk:", junk)
+	log.Println("indices:", indices)
+
+	return junk, nil
+}
+
+// updateLinkedListPointers updates Next and Previous pointers of a node's neighboring nodes to its new address.
+func updateLinkedListPointers(flFile *os.File, model *models.Certificate, newAddress uint32) error {
+	// update the previous node's next pointer
+	if model.Previous != -1 {
+		var prevModel models.Certificate
+		err := ReadModel(flFile, &prevModel, model.Previous, io.SeekStart)
+		if err != nil {
+			return err
+		}
+		prevModel.Next = int64(newAddress)
+		err = WriteModel(flFile, &prevModel, model.Previous, io.SeekStart)
+		if err != nil {
+			return err
+		}
+	}
+
+	// update the next node's previous pointer
+	if model.Next != -1 {
+		var nextModel models.Certificate
+		err := ReadModel(flFile, &nextModel, model.Next, io.SeekStart)
+		if err != nil {
+			return err
+		}
+		nextModel.Previous = int64(newAddress)
+		err = WriteModel(flFile, &nextModel, model.Next, io.SeekStart)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // TruncateFile truncates the given file to a specific length.
 func TruncateFile(file *os.File, address int64) error {

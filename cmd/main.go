@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/adhocore/chin"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/config"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
@@ -28,13 +27,13 @@ func main() {
 	}
 
 	if slave.RequiresCompaction() {
-		if driver.PromptCompactionConfirmation(masterName) {
-			s := chin.New()
-			go s.Start()
-
-			s.Stop()
-		} else {
-			fmt.Println("Skipped")
+		if driver.PromptCompactionConfirmation(slaveName) {
+			updatedJunk, err := driver.CompactSlaveFile(slave.FL, slave.Indices, slave.Junk)
+			if err != nil {
+				fmt.Println("error compacting file:", err)
+				os.Exit(1)
+			}
+			slave.Junk = updatedJunk
 		}
 	}
 
@@ -49,12 +48,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = driver.WriteServiceData(masterName, app.Master.Indices, app.Master.Junk)
+	err = driver.WriteServiceData(masterName, app.Master.Indices, app.Master.Junk, false)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = driver.WriteServiceData(slaveName, app.Slave.Indices, app.Slave.Junk)
+	err = driver.WriteServiceData(slaveName, app.Slave.Indices, app.Slave.Junk, true)
 	if err != nil {
 		log.Fatal(err)
 	}

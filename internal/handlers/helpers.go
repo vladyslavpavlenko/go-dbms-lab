@@ -109,7 +109,7 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 func printSlaveQuery(flFile *os.File, offset int64, queries []string, all bool) {
 	_, err := flFile.Seek(offset, io.SeekStart)
 	if err != nil {
-		fmt.Println("failed to seek file:", err)
+		fmt.Println(0)
 		return
 	}
 
