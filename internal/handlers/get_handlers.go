@@ -72,6 +72,12 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 			fmt.Printf("error parsing ID: %v\n", err)
 			return
 		}
+
+		exists := utils.RecordExists(r.App.Slave.Indices, uint32(id))
+		if !exists {
+			fmt.Printf("slave record with ID %d does not exist\n", id)
+			return
+		}
 	}
 
 	var courseID int
@@ -85,33 +91,45 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 			queries = append(queries, strings.ToUpper(q))
 		}
 
-		courseID, err = strconv.Atoi(queries[0])
-		if err != nil {
-			courseID = -1
-		} else {
-			exists := utils.RecordExists(r.App.Master.Indices, uint32(courseID))
-			if !exists {
-				fmt.Printf("master record with ID %d does not exist\n", courseID)
-				return
-			}
-
-			address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
-			if !ok {
-				fmt.Printf("record with ID %d not found\n", courseID)
-				return
-			}
-
-			var model models.Course
-			err = driver.ReadModel(r.App.Master.FL, &model, int64(address), io.SeekStart)
+		if all {
+			courseID, err = strconv.Atoi(queries[0])
 			if err != nil {
-				fmt.Printf("error reading master data: %s\n", err)
-				return
-			}
+				courseID = -1
+			} else {
+				exists := utils.RecordExists(r.App.Master.Indices, uint32(courseID))
+				if !exists {
+					fmt.Printf("master record with ID %d does not exist\n", courseID)
+					return
+				}
 
-			fsAddress = model.FirstSlaveAddress
-			offset = fsAddress
+				address, ok := utils.GetAddressByIndex(r.App.Master.Indices, uint32(courseID))
+				if !ok {
+					fmt.Printf("record with ID %d not found\n", courseID)
+					return
+				}
+
+				var model models.Course
+				err = driver.ReadModel(r.App.Master.FL, &model, int64(address), io.SeekStart)
+				if err != nil {
+					fmt.Printf("error reading master data: %s\n", err)
+					return
+				}
+
+				fsAddress = model.FirstSlaveAddress
+				offset = fsAddress
+			}
 		}
 	}
 
-	printSlaveQuery(r.App.Slave.FL, offset, id, fsAddress, queries, all)
+	if !all {
+		address, ok := utils.GetAddressByIndex(r.App.Slave.Indices, uint32(id))
+		if !ok {
+			fmt.Printf("error getting index of the slave record with id %d: %s\n", id, err)
+			return
+		}
+
+		offset = int64(address)
+	}
+
+	printSlaveQuery(r.App.Slave.FL, offset, queries, all)
 }

@@ -107,10 +107,10 @@ func printMasterQuery(flFile *os.File, offset int64, queries []string, all bool)
 
 // printSlaveQuery prints selected fields from the slave table based on provided field queries.
 // If all is true, all records are printed. If courseIDFilter is not -1, it filters records by course ID.
-func printSlaveQuery(flFile *os.File, offset int64, id int, fsAddress int64, queries []string, all bool) {
+func printSlaveQuery(flFile *os.File, offset int64, queries []string, all bool) {
 	_, err := flFile.Seek(offset, io.SeekStart)
 	if err != nil {
-		fmt.Println("Failed to seek file:", err)
+		fmt.Println("failed to seek file:", err)
 		return
 	}
 
@@ -145,7 +145,7 @@ func printSlaveQuery(flFile *os.File, offset int64, id int, fsAddress int64, que
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Printf("rrror reading slave data: %s\n", err)
+			fmt.Printf("error reading slave data: %s\n", err)
 			return
 		}
 
@@ -203,6 +203,7 @@ func (r *Repository) deleteSubrecords(flFile *os.File, address int64) {
 
 		clear(model.IssuedTo[:])
 		model.Next = -1
+		model.Previous = -1
 		model.Presence = false
 
 		r.App.Slave.Junk = append(r.App.Slave.Junk, uint32(address))
