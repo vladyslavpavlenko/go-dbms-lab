@@ -35,6 +35,8 @@ func (r *Repository) DeleteMaster(_ *cobra.Command, args []string) {
 		if err != nil {
 			return
 		}
+
+		fmt.Println("OK")
 	}
 
 	lastRecordAddress, ok := driver.GetLastRecordAddress(r.App.Master.Indices)
