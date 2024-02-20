@@ -80,7 +80,7 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 	}
 
 	var courseID int
-	var fsAddress int64 = -1
+	var fsAddress int64 = driver.NoLink
 	var queries []string
 	var offset int64
 
@@ -93,7 +93,7 @@ func (r *Repository) GetSlave(cmd *cobra.Command, args []string) {
 		if all {
 			courseID, err = strconv.Atoi(queries[0])
 			if err != nil {
-				courseID = -1
+				courseID = driver.NoLink
 			} else {
 				exists := driver.RecordExists(r.App.Master.Indices, uint32(courseID))
 				if !exists {

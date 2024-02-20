@@ -1,7 +1,6 @@
 package driver
 
 import (
-	"bufio"
 	"fmt"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
@@ -18,7 +17,6 @@ func AddIndex(indices []IndexTable, id uint32, address uint32) []IndexTable {
 		Address: address,
 	}
 	indices = append(indices, entry)
-	log.Printf("added a new record with ID %d at address %d.\n", id, address)
 	return SortIndices(indices)
 }
 
@@ -27,7 +25,6 @@ func RemoveIndex(indices []IndexTable, id uint32) []IndexTable {
 	for i, entry := range indices {
 		if entry.Index == id {
 			indices = append(indices[:i], indices[i+1:]...)
-			log.Printf("removed record with ID %d from index table\n", id)
 			break
 		}
 	}
@@ -38,12 +35,11 @@ func RemoveIndex(indices []IndexTable, id uint32) []IndexTable {
 func UpdateAddress(indices []IndexTable, id uint32, newAddress uint32) []IndexTable {
 	for i, entry := range indices {
 		if entry.Index == id {
-			log.Printf("updated the record with ID %d: [%d -> %d]\n", id, entry.Address, newAddress)
 			indices[i].Address = newAddress
 			break
 		}
 	}
-	return SortIndices(indices)
+	return indices
 }
 
 // WriteIndices writes the sorted indices to the specified .ind file.
@@ -99,7 +95,6 @@ func RecordExists(indices []IndexTable, id uint32) bool {
 // SortIndices sorts the IndexTable entries in ascending order by index.
 func SortIndices(indices []IndexTable) []IndexTable {
 	sort.Slice(indices, func(i, j int) bool { return indices[i].Index < indices[j].Index })
-	log.Println("Indices sorted.")
 	return indices
 }
 
@@ -113,11 +108,11 @@ func NumberOfSubrecords(flFile *os.File, firstSlaveAddress int64) int {
 	count := 0
 	nextAddress := firstSlaveAddress
 
-	for nextAddress != -1 {
+	for nextAddress != NoLink {
 		var slave models.Certificate
-		err := ReadModel(flFile, &slave, int64(nextAddress), io.SeekStart)
+		err := ReadModel(flFile, &slave, nextAddress, io.SeekStart)
 		if err != nil {
-			fmt.Printf("error reading slave model: %v\n", err)
+			fmt.Printf("error reading slave model: %s\n", err)
 			break
 		}
 		if slave.Presence {
@@ -166,19 +161,6 @@ func WriteServiceData(fileName string, indices []IndexTable, junk []uint32, with
 	return nil
 }
 
-// PromptCompactionConfirmation prompts the user to confirm files compaction.
-func PromptCompactionConfirmation(fileName string) bool {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("Table '%s' can be compacted. Do you want to proceed? [Y/n]: ", fileName)
-	response, err := reader.ReadString('\n')
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to read input: %v\n", err)
-		return false
-	}
-	response = strings.TrimSpace(response)
-	return strings.ToLower(response) == "y" || response == ""
-}
-
 // RequiresCompaction checks if the total size of the junk exceeds a predefined threshold.
 func (t *Table) RequiresCompaction() bool {
 	totalJunkSize := len(t.Junk)
@@ -188,8 +170,7 @@ func (t *Table) RequiresCompaction() bool {
 // LoadIndices reads IndexTable entries from an .ind file, initializing the table's indices.
 func LoadIndices(indFile *os.File) ([]IndexTable, error) {
 	if _, err := indFile.Seek(0, io.SeekStart); err != nil {
-		fmt.Printf("error reading data: %s\n", err)
-		return nil, err
+		return nil, fmt.Errorf("error seeking file: %w", err)
 	}
 
 	var indices []IndexTable
@@ -199,13 +180,10 @@ func LoadIndices(indFile *os.File) ([]IndexTable, error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Printf("error reading data: %s\n", err)
-			return nil, err
+			return nil, fmt.Errorf("error reading data: %w", err)
 		}
 		indices = append(indices, model)
 	}
-
-	log.Println("indices loaded: ", indices)
 
 	return indices, nil
 }
@@ -224,13 +202,10 @@ func LoadJunk(jkFile *os.File) ([]uint32, error) {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			fmt.Printf("error reading data: %s\n", err)
-			return nil, err
+			return nil, fmt.Errorf("error reading data: %w", err)
 		}
 		junk = append(junk, address)
 	}
-
-	log.Println("junk loaded: ", junk)
 
 	return junk, nil
 }

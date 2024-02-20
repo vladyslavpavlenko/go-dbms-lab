@@ -13,6 +13,8 @@ import (
 var app config.AppConfig
 
 func main() {
+	fmt.Println("program started")
+
 	masterName := "courses"
 	slaveName := "certificates"
 
@@ -24,17 +26,6 @@ func main() {
 	slave, err := driver.CreateTable(slaveName, models.Certificate{}, true)
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	if slave.RequiresCompaction() {
-		if driver.PromptCompactionConfirmation(slaveName) {
-			updatedJunk, err := driver.CompactSlaveFile(slave.FL, slave.Indices, slave.Junk)
-			if err != nil {
-				fmt.Println("error compacting file:", err)
-				os.Exit(1)
-			}
-			slave.Junk = updatedJunk
-		}
 	}
 
 	app.Master = master

@@ -1,0 +1,34 @@
+insert-m 1 "Microservices in Go" "Go" "Trevor Sawler"
+insert-m 2 "Relational Database Design" "SQL" "Ben Brumm"
+insert-m 3 "Python for Absolute Beginners" "Python" "Green Chameleon Learning"
+insert-m 4 "Learn to Code with Ruby" "Ruby" "Boris Paskhaver"
+insert-m 5 "Working with Concurrency in Go" "Go" "Trevor Sawler"
+
+insert-s 1 1 "Ben Walles"
+insert-s 2 2 "Evelyn Leach"
+insert-s 3 2 "Khloe Moyer"
+insert-s 4 3 "Asher Pearson"
+insert-s 5 3 "Kaiser Diaz"
+insert-s 6 3 "Bruce George"
+
+ut-m
+ut-s
+
+del-m 2
+
+del-s 5
+
+ut-m
+ut-s
+
+insert-m 2 "SvelteKit: The Complete Guide" "SvelteKit" "Ali Alaa"
+insert-s 2 2 "Mathew Byers"
+
+ut-m
+ut-s
+
+update-m 2 "-" "-" "John Cook"
+update-s 2 "Ben Diaz"
+
+ut-m
+ut-s

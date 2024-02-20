@@ -6,7 +6,6 @@ import (
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/driver"
 	"github.com/vladyslavpavlenko/go-dbms-lab/internal/models"
 	"io"
-	"log"
 	"strconv"
 )
 
@@ -56,7 +55,7 @@ func (r *Repository) UpdateMaster(_ *cobra.Command, args []string) {
 		return
 	}
 
-	log.Println("Master record updated:", course)
+	fmt.Println("OK")
 }
 
 // UpdateSlave handles updating fields of the slave entry by its ID.
@@ -98,5 +97,5 @@ func (r *Repository) UpdateSlave(_ *cobra.Command, args []string) {
 		return
 	}
 
-	log.Println("Slave record updated:", certificate)
+	fmt.Println("OK")
 }

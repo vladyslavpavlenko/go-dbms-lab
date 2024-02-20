@@ -32,7 +32,7 @@ func (r *Repository) CalcSlave(_ *cobra.Command, args []string) {
 		var course models.Course
 		err = driver.ReadModel(r.App.Master.FL, &course, int64(address), io.SeekStart)
 		if err != nil {
-			fmt.Printf("error retrieving master model: %s\n", err)
+			fmt.Printf("error reading course: %s\n", err)
 			return
 		}
 

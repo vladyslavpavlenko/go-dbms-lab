@@ -115,7 +115,7 @@ func printSlaveQuery(flFile *os.File, offset int64, queries []string, all bool) 
 
 	headers := []string{"ID", "COURSE_ID", "ISSUED_TO"}
 
-	courseIDFilter := -1
+	courseIDFilter := driver.NoLink
 	if len(queries) > 0 && all {
 		parsedID, err := strconv.Atoi(queries[0])
 		if err == nil {
@@ -153,7 +153,7 @@ func printSlaveQuery(flFile *os.File, offset int64, queries []string, all bool) 
 			continue
 		}
 
-		if courseIDFilter != -1 && int(model.CourseID) != courseIDFilter {
+		if courseIDFilter != driver.NoLink && int(model.CourseID) != courseIDFilter {
 			offset = model.Next
 			continue
 		}
@@ -188,34 +188,124 @@ func printSlaveQuery(flFile *os.File, offset int64, queries []string, all bool) 
 	table.Render()
 }
 
-func (r *Repository) deleteSubrecords(flFile *os.File, address int64) {
-	for address != -1 {
+func deleteSubrecords(r *Repository, address int64) error {
+	for address != driver.NoLink {
 		var model models.Certificate
 
-		err := driver.ReadModel(flFile, &model, address, io.SeekStart)
+		err := driver.ReadModel(r.App.Slave.FL, &model, address, io.SeekStart)
 		if err != nil {
-			log.Printf("error reading slave record for deletion: %s\n", err)
-			break
+			return fmt.Errorf("error reading slave record for deletion: %w", err)
 		}
 
 		nextAddress := model.Next
 
 		clear(model.IssuedTo[:])
-		model.Next = -1
-		model.Previous = -1
+		model.Next = driver.NoLink
+		model.Previous = driver.NoLink
 		model.Presence = false
 
 		r.App.Slave.Junk = append(r.App.Slave.Junk, uint32(address))
 		r.App.Slave.Indices = driver.RemoveIndex(r.App.Slave.Indices, model.ID)
 
-		err = driver.WriteModel(flFile, &model, address, io.SeekStart)
+		err = driver.WriteModel(r.App.Slave.FL, &model, address, io.SeekStart)
 		if err != nil {
-			log.Println("error updating slave record to mark as deleted:", err)
-			break
+			return fmt.Errorf("error updating slave record to mark as deleted: %w", err)
 		}
-
-		log.Printf("deleted slave record at address %d\n", address)
 
 		address = nextAddress
 	}
+
+	if r.App.Slave.RequiresCompaction() {
+		updatedJunk, err := driver.CompactSlaveFile(r.App.Slave.FL, r.App.Slave.Indices, r.App.Slave.Junk)
+		if err != nil {
+			return fmt.Errorf("error compacting file: %w", err)
+		}
+		r.App.Slave.Junk = updatedJunk
+	}
+
+	return nil
+}
+
+// deleteFirstNode handles first node deletion.
+func deleteFirstNode(r *Repository, certificateToDelete models.Certificate, courseAddress int64) error {
+	var course models.Course
+	err := driver.ReadModel(r.App.Master.FL, &course, courseAddress, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error reading course: %w", err)
+	}
+
+	course.FirstSlaveAddress = certificateToDelete.Next
+
+	err = driver.WriteModel(r.App.Master.FL, &course, courseAddress, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error updating course.FirstSlaveAddress: %w", err)
+	}
+
+	var nextCertificate models.Certificate
+
+	err = driver.ReadModel(r.App.Slave.FL, &nextCertificate, certificateToDelete.Next, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error reading nextCertificate model: %w", err)
+	}
+
+	nextCertificate.Previous = driver.NoLink
+
+	err = driver.WriteModel(r.App.Slave.FL, &nextCertificate, certificateToDelete.Next, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error updating nextCertificate: %w", err)
+	}
+
+	return nil
+}
+
+// deleteMiddleNode handles middle node deletion.
+func deleteMiddleNode(r *Repository, certificateToDelete models.Certificate) error {
+	var previousCertificate models.Certificate
+
+	err := driver.ReadModel(r.App.Slave.FL, &previousCertificate, certificateToDelete.Previous, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error reading previousCertificate: %w", err)
+	}
+
+	previousCertificate.Next = certificateToDelete.Next
+
+	err = driver.WriteModel(r.App.Slave.FL, &previousCertificate, certificateToDelete.Previous, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error updating previousCertificate: %w", err)
+	}
+
+	var nextCertificate models.Certificate
+
+	err = driver.ReadModel(r.App.Slave.FL, &nextCertificate, certificateToDelete.Next, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error reading nextCertificate: %w", err)
+	}
+
+	nextCertificate.Previous = certificateToDelete.Previous
+
+	err = driver.WriteModel(r.App.Slave.FL, &nextCertificate, certificateToDelete.Next, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error updating nextCertificate: %w", err)
+	}
+
+	return nil
+}
+
+// deleteLastNode handles last node deletion.
+func deleteLastNode(r *Repository, certificateToDelete models.Certificate) error {
+	var previousCertificate models.Certificate
+
+	err := driver.ReadModel(r.App.Slave.FL, &previousCertificate, certificateToDelete.Previous, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error reading previousCertificate: %w", err)
+	}
+
+	previousCertificate.Next = driver.NoLink
+
+	err = driver.WriteModel(r.App.Slave.FL, &previousCertificate, certificateToDelete.Previous, io.SeekStart)
+	if err != nil {
+		return fmt.Errorf("error updating previousCertificate: %w", err)
+	}
+
+	return nil
 }
