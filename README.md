@@ -89,6 +89,6 @@ $ calc-s 1
 `ut-m`, `ut-s`: Display all fields of master and slave files, including service fields.
 
 ## Dependencies
-* [kballard/go-shellquote](github.com/kballard/go-shellquote)
-* [olekukonko/tablewriter](github.com/olekukonko/tablewriter)
-* [spf13/cobra](github.com/spf13/cobra)
+* [kballard/go-shellquote](https://github.com/kballard/go-shellquote)
+* [olekukonko/tablewriter](https://github.com/olekukonko/tablewriter)
+* [spf13/cobra](https://github.com/spf13/cobra)
